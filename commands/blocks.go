@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"fmt"
 	"github.com/rovergulf/rbn/core"
 	"github.com/spf13/cobra"
 )
@@ -27,7 +28,7 @@ func blocksListCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			logger.Info("blocks list called")
 
-			bc, err := core.NewBlockchain(core.Options{
+			bc, err := core.ContinueBlockchain(core.Options{
 				DbFilePath: getDbFilePath(),
 				Logger:     logger,
 			})
@@ -35,7 +36,7 @@ func blocksListCmd() *cobra.Command {
 				logger.Error("Unable to start blockchain: %s", err)
 				return err
 			}
-			defer bc.Db.Close()
+			defer bc.Shutdown()
 			bci := bc.Iterator()
 
 			for {
@@ -45,20 +46,24 @@ func blocksListCmd() *cobra.Command {
 				}
 
 				pow := core.NewProofOfWork(block)
-				logger.Infof("Current block hash: '%x'; Previous hash: '%x'; Validated: %v",
-					block.Hash, block.PrevHash, pow.Validate(),
-				)
+				if err := writeOutput(cmd, map[string]interface{}{
+					"hash":      fmt.Sprintf("%x", block.Hash),
+					"prev_hash": fmt.Sprintf("%x", block.PrevHash),
+					"pow":       fmt.Sprintf("%v", pow.Validate()),
+				}); err != nil {
+					logger.Errorf("Unable to write block response: %s", err)
+				}
 
 				if len(block.PrevHash) == 0 {
 					break
 				}
-
-				return nil
 			}
 
 			return nil
 		},
 	}
+
+	addOutputFormatFlag(blocksListCmd)
 
 	return blocksListCmd
 }
@@ -69,24 +74,37 @@ func blocksAddCmd() *cobra.Command {
 		Use:   "add",
 		Short: "Add new blockchain block",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			data, _ := cmd.Flags().GetString("data")
+			from, _ := cmd.Flags().GetString("from")
+			to, _ := cmd.Flags().GetString("to")
+			amount, _ := cmd.Flags().GetInt("amount")
 
-			bc, err := core.NewBlockchain(getBlockchainConfig(cmd))
+			bc, err := core.ContinueBlockchain(getBlockchainConfig(cmd))
 			if err != nil {
 				logger.Error("Unable to start blockchain: %s", err)
 				return err
 			}
-			defer bc.Db.Close()
+			defer bc.Shutdown()
 
-			logger.Infof("Add block with data: %s", data)
+			tx, err := core.NewTransaction(from, to, amount, bc)
+			if err != nil {
+				return err
+			}
 
-			// return bc.MineBlock(data)
-			return nil
+			newBlock, err := bc.MineBlock([]*core.Transaction{tx})
+			if err != nil {
+				return err
+			} else {
+				return writeOutput(cmd, newBlock)
+			}
 		},
 	}
 
-	blocksAddCmd.Flags().StringP("data", "d", "", "Specify block data")
-	blocksAddCmd.MarkFlagRequired("data")
+	blocksAddCmd.Flags().String("from", "", "Sender address")
+	blocksAddCmd.Flags().String("to", "", "Receiver address")
+	blocksAddCmd.Flags().String("amount", "", "Transaction coin amount")
+	blocksAddCmd.MarkFlagRequired("from")
+	blocksAddCmd.MarkFlagRequired("to")
+	blocksAddCmd.MarkFlagRequired("amount")
 
 	return blocksAddCmd
 }

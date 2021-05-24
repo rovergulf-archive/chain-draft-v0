@@ -14,6 +14,7 @@ type Block struct {
 	Hash         []byte         `json:"hash" yaml:"hash"`
 	PrevHash     []byte         `json:"prev_hash" yaml:"prev_hash"`
 	Nonce        int            `json:"nonce" yaml:"nonce"`
+	Height       int            `json:"height" yaml:"height"`
 }
 
 // NewBlock creates and returns Block

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"github.com/dgraph-io/badger/v3"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -12,8 +13,9 @@ import (
 )
 
 var (
-	cfgFile string
-	logger  *zap.SugaredLogger
+	cfgFile, dataDir string
+	logger           *zap.SugaredLogger
+	badgerOpts       badger.Options
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -48,17 +50,25 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
+	// config
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.rnt.yaml)")
+
+	// logger opts
 	rootCmd.PersistentFlags().Bool("log_json", false, "Enable JSON formatted logs output")
 	rootCmd.PersistentFlags().Int("log_level", int(zapcore.DebugLevel), "Log level")
-	rootCmd.PersistentFlags().String("data_dir", "tmp", "Blockchain data directory")
+	rootCmd.PersistentFlags().Bool("log_stacktrace", false, "Log stacktrace verbose")
 
+	// main flags
+	rootCmd.PersistentFlags().StringVar(&dataDir, "data_dir", "tmp", "Blockchain data directory")
+
+	// bind viper values
 	bindViperPersistentFlag(rootCmd, "jaeger_trace_url", "jaeger_trace")
 	bindViperPersistentFlag(rootCmd, "log_json", "log_json")
 	bindViperPersistentFlag(rootCmd, "log_level", "log_level")
+	bindViperPersistentFlag(rootCmd, "log_stacktrace", "log_stacktrace")
 	bindViperPersistentFlag(rootCmd, "data_dir", "data_dir")
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
+
+	// show version
 	rootCmd.Flags().BoolP("version", "v", false, "Display version")
 
 	initZapLogger()
@@ -112,12 +122,12 @@ func setConfigDefaults() {
 	viper.SetDefault("ssl.verify", false)
 
 	// bootstrap server
-	viper.SetDefault("bootstrap.addr", "0.0.0.0") // chain.rovergulf.net
+	viper.SetDefault("bootstrap.addr", "0.0.0.0") // swarm.rovergulf.net
 	viper.SetDefault("bootstrap.port", 9420)
 
 	// http server
 	viper.SetDefault("http.addr", "0.0.0.0")
-	viper.SetDefault("http.port", 9069)
+	viper.SetDefault("http.port", 9000)
 
 	// TBD
 	// Runtime configuration

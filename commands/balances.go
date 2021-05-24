@@ -30,7 +30,7 @@ func balancesListCmd() *cobra.Command {
 				logger.Error("Unable to start blockchain: %s", err)
 				return err
 			}
-			defer bc.Db.Close()
+			defer bc.Shutdown()
 
 			logger.Info("balances list called")
 			return nil
@@ -53,16 +53,19 @@ func balancesGetCmd() *cobra.Command {
 				logger.Error("Unable to start blockchain: %s", err)
 				return err
 			}
-			defer bc.Db.Close()
+			defer bc.Shutdown()
 
 			address, _ := cmd.Flags().GetString("address")
 
 			balance := 0
-			UTXOs := bc.FindUTXO(address)
+			//UTXOs, err := bc.FindUTXO()
+			//if err != nil {
+			//	return err
+			//}
 
-			for _, out := range UTXOs {
-				balance += out.Value
-			}
+			//for _, out := range UTXOs {
+			//balance += out.Outputs[0].Value
+			//}
 
 			return writeOutput(cmd, map[string]interface{}{
 				"address": address,
