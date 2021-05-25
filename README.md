@@ -51,7 +51,7 @@ rbn --version
 
 ### Rovergulf Native Token
 
-An extra reward for platform achievements and/or trading 
+An extra reward for platform achievements and/or trading
 
 ---
 ## Maintainers
