@@ -5,94 +5,127 @@ import (
 	"crypto/elliptic"
 	"encoding/gob"
 	"fmt"
+	"github.com/dgraph-io/badger/v3"
+	"github.com/rovergulf/rbn/pkg/config"
+	"github.com/rovergulf/rbn/pkg/repo"
 	"github.com/spf13/viper"
-	"io/ioutil"
-	"log"
-	"os"
+	"go.uber.org/zap"
 	"path"
 )
 
 const DbWalletFile = "wallets.db"
 
 type Wallets struct {
-	Wallets map[string]*Wallet
+	Db     *badger.DB `json:"-" yaml:"-"`
+	logger *zap.SugaredLogger
 }
 
-func CreateWallets(nodeId string) (*Wallets, error) {
-	wallets := Wallets{}
-	wallets.Wallets = make(map[string]*Wallet)
+func InitWallets(opts config.Options) (*Wallets, error) {
+	fmt.Println("wallets file path", opts.WalletsFilePath)
+	badgerOpts := badger.DefaultOptions(opts.WalletsFilePath)
+	db, err := repo.OpenDB(opts.WalletsFilePath, badgerOpts)
+	if err != nil {
+		opts.Logger.Errorf("Unable to open db file: %s", err)
+		return nil, err
+	}
 
-	err := wallets.LoadFile(nodeId)
-
-	return &wallets, err
+	return &Wallets{
+		Db:     db,
+		logger: opts.Logger,
+	}, err
 }
 
-func (ws *Wallets) AddWallet() string {
-	wallet := MakeWallet()
-	address := fmt.Sprintf("%s", wallet.Address())
-
-	ws.Wallets[address] = wallet
-
-	return address
+func (ws *Wallets) Shutdown() {
+	if ws.Db != nil {
+		if err := ws.Db.Close(); err != nil {
+			ws.logger.Errorf("Unable to close wallets db: %s", err)
+		}
+	}
 }
 
-func (ws *Wallets) GetAllAddresses() []string {
+func (ws *Wallets) AddWallet() (*Wallet, error) {
+	wallet, err := MakeWallet()
+	if err != nil {
+		return nil, err
+	}
+
+	addr, err := wallet.Address()
+	if err != nil {
+		return nil, err
+	}
+
+	val, err := wallet.Serialize()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := ws.Db.Update(func(txn *badger.Txn) error {
+		return txn.Set(addr, val)
+	}); err != nil {
+		return nil, err
+	}
+
+	return wallet, nil
+}
+
+func (ws *Wallets) GetAllAddresses() ([]string, error) {
 	var addresses []string
 
-	for address := range ws.Wallets {
-		addresses = append(addresses, address)
+	if err := ws.Db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchSize = 10
+		it := txn.NewIterator(opts)
+		defer it.Close()
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			addresses = append(addresses, fmt.Sprintf("%s", item.Key()))
+		}
+		return nil
+	}); err != nil {
+		ws.logger.Errorw("Unable to iterate db view", "err", err)
+		return nil, err
 	}
 
-	return addresses
+	return addresses, nil
 }
 
-func (ws Wallets) GetWallet(address string) Wallet {
-	return *ws.Wallets[address]
-}
+func (ws Wallets) GetWallet(address string) (*Wallet, error) {
+	var w *Wallet
 
-func (ws *Wallets) LoadFile(nodeId string) error {
-	walletFile := fmt.Sprintf(walletFile(), nodeId)
-	if _, err := os.Stat(walletFile); os.IsNotExist(err) {
-		return err
+	if err := ws.Db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte(address))
+		if err != nil {
+			return err
+		}
+
+		return item.Value(func(val []byte) error {
+			wallet, err := DeserializeWallet(val)
+			if err != nil {
+				return err
+			}
+
+			w = wallet
+			return nil
+		})
+	}); err != nil {
+		return nil, err
 	}
 
-	var wallets Wallets
-
-	fileContent, err := ioutil.ReadFile(walletFile)
-	if err != nil {
-		return err
-	}
-
-	gob.Register(elliptic.P256())
-	decoder := gob.NewDecoder(bytes.NewReader(fileContent))
-	err = decoder.Decode(&wallets)
-	if err != nil {
-		return err
-	}
-
-	ws.Wallets = wallets.Wallets
-
-	return nil
-}
-
-func (ws *Wallets) SaveFile(nodeId string) {
-	var content bytes.Buffer
-	walletFile := fmt.Sprintf(walletFile(), nodeId)
-
-	gob.Register(elliptic.P256())
-
-	encoder := gob.NewEncoder(&content)
-	err := encoder.Encode(ws)
-	if err != nil {
-		log.Panic(err)
-	}
-
-	err = ioutil.WriteFile(walletFile, content.Bytes(), 0644)
-	if err != nil {
-		log.Panic(err)
-	}
+	return w, nil
 }
 
 func walletFile() string {
 	return path.Join(viper.GetString("data_dir"), DbWalletFile)
+}
+
+func DeserializeWallets(data []byte) (map[string]Wallet, error) {
+	wallets := make(map[string]Wallet)
+
+	gob.Register(elliptic.P256())
+	decoder := gob.NewDecoder(bytes.NewReader(data))
+	if err := decoder.Decode(&wallets); err != nil {
+		return nil, err
+	}
+
+	return wallets, nil
 }

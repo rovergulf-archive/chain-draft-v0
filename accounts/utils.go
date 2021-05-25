@@ -1,10 +1,11 @@
 package accounts
 
 import (
-	"log"
-
 	"github.com/mr-tron/base58"
 )
+
+// DigestLength is for signature digest length
+const DigestLength = 32
 
 func Base58Encode(input []byte) []byte {
 	encode := base58.Encode(input)
@@ -12,13 +13,11 @@ func Base58Encode(input []byte) []byte {
 	return []byte(encode)
 }
 
-func Base58Decode(input []byte) []byte {
+func Base58Decode(input []byte) ([]byte, error) {
 	decode, err := base58.Decode(string(input[:]))
 	if err != nil {
-		log.Panic(err)
+		return nil, err
 	}
 
-	return decode
+	return decode, nil
 }
-
-// 0 O l I + /
