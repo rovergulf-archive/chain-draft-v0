@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	headerLength = 16
+	BlockDifficulty = 16
 )
 
 var (
@@ -24,7 +24,7 @@ type ProofOfWork struct {
 
 func NewProofOfWork(b *Block) *ProofOfWork {
 	target := big.NewInt(1)
-	target.Lsh(target, uint(256-headerLength))
+	target.Lsh(target, uint(256-BlockDifficulty))
 
 	pow := &ProofOfWork{b, target}
 
@@ -38,7 +38,7 @@ func (pow *ProofOfWork) prepareData(nonce int) []byte {
 			pow.block.PrevHash,
 			pow.block.HashTransactions(),
 			IntToHex(pow.block.Timestamp),
-			IntToHex(int64(headerLength)),
+			IntToHex(int64(BlockDifficulty)),
 			IntToHex(int64(nonce)),
 		},
 		[]byte{},

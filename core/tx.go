@@ -8,23 +8,26 @@ import (
 
 // TxInput represents a transaction input
 type TxInput struct {
-	ID        []byte
-	Out       int
-	Signature []byte
-	PubKey    []byte
+	ID        []byte `json:"id" yaml:"id"`
+	Out       int    `json:"out" yaml:"out"`
+	Signature []byte `json:"-" yaml:"-"`
+	PubKey    []byte `json:"-" yaml:"-"`
 }
 
 // UsesKey checks whether the address initiated the transaction
 func (in *TxInput) UsesKey(pubKeyHash []byte) bool {
-	lockingHash := accounts.PublicKeyHash(in.PubKey)
+	lockingHash, err := accounts.PublicKeyHash(in.PubKey)
+	if err != nil {
+		return false
+	}
 
 	return bytes.Compare(lockingHash, pubKeyHash) == 0
 }
 
 // TxOutput represents a transaction output
 type TxOutput struct {
-	Value      int
-	PubKeyHash []byte
+	Value      int    `json:"value" yaml:"value"`
+	PubKeyHash []byte `json:"pub_key_hash" yaml:"pub_key_hash"`
 }
 
 type TxOutputs struct {
@@ -32,10 +35,15 @@ type TxOutputs struct {
 }
 
 // Lock signs the output
-func (out *TxOutput) Lock(address []byte) {
-	pubKeyHash := accounts.Base58Decode(address)
+func (out *TxOutput) Lock(address []byte) error {
+	pubKeyHash, err := accounts.Base58Decode(address)
+	if err != nil {
+		return err
+	}
 	pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-4]
 	out.PubKeyHash = pubKeyHash
+
+	return nil
 }
 
 // IsLockedWithKey checks if the output can be used by the owner of the pubkey
@@ -44,11 +52,13 @@ func (out *TxOutput) IsLockedWithKey(pubKeyHash []byte) bool {
 }
 
 // NewTxOutput create a new TxOutput
-func NewTxOutput(value int, address string) *TxOutput {
-	txo := &TxOutput{value, nil}
-	txo.Lock([]byte(address))
+func NewTxOutput(value int, address string) (*TxOutput, error) {
+	txo := &TxOutput{Value: value}
+	if err := txo.Lock([]byte(address)); err != nil {
+		return nil, err
+	}
 
-	return txo
+	return txo, nil
 }
 
 func (outs TxOutputs) Serialize() ([]byte, error) {

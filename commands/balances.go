@@ -1,8 +1,11 @@
 package commands
 
 import (
+	"fmt"
+	"github.com/rovergulf/rbn/accounts"
 	"github.com/rovergulf/rbn/core"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // balancesCmd represents the balances command
@@ -25,19 +28,35 @@ func balancesListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "Lists all balances.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			bc, err := core.NewBlockchain(getBlockchainConfig(cmd))
+			bc, err := core.ContinueBlockchain(getBlockchainConfig(cmd))
 			if err != nil {
 				logger.Error("Unable to start blockchain: %s", err)
 				return err
 			}
 			defer bc.Shutdown()
 
-			logger.Info("balances list called")
-			return nil
+			balance := 0
+			UTXOs, err := bc.FindUTXO()
+			if err != nil {
+				return err
+			}
+
+			for _, out := range UTXOs {
+				for i := range out.Outputs {
+					logger.Infof("out.Outputs[%d].Value: %d", i, out.Outputs[i].Value)
+				}
+				balance += out.Outputs[0].Value
+			}
+
+			result := map[string]interface{}{
+				"balance": balance,
+			}
+			return writeOutput(cmd, result)
 		},
 	}
 
 	addOutputFormatFlag(balancesListCmd)
+	addNodeIdFlag(balancesListCmd)
 
 	return balancesListCmd
 }
@@ -48,24 +67,30 @@ func balancesGetCmd() *cobra.Command {
 		Use:   "get",
 		Short: "Get blockchain address balance.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			bc, err := core.NewBlockchain(getBlockchainConfig(cmd))
+			address := viper.GetString("address")
+			if len(address) > 0 {
+				if !accounts.ValidateAddress(address) {
+					return fmt.Errorf("invalid address")
+				}
+			}
+
+			bc, err := core.ContinueBlockchain(getBlockchainConfig(cmd))
 			if err != nil {
 				logger.Error("Unable to start blockchain: %s", err)
 				return err
 			}
 			defer bc.Shutdown()
 
-			address, _ := cmd.Flags().GetString("address")
-
 			balance := 0
-			//UTXOs, err := bc.FindUTXO()
-			//if err != nil {
-			//	return err
-			//}
+			UTXOs, err := bc.FindUTXO()
+			if err != nil {
+				return err
+			}
 
-			//for _, out := range UTXOs {
-			//balance += out.Outputs[0].Value
-			//}
+			for _, out := range UTXOs {
+				fmt.Println("out.Outputs[0].Value:", out.Outputs[0].Value)
+				balance += out.Outputs[0].Value
+			}
 
 			return writeOutput(cmd, map[string]interface{}{
 				"address": address,
@@ -75,6 +100,8 @@ func balancesGetCmd() *cobra.Command {
 	}
 
 	addAddressFlag(balancesGetCmd)
+	addNodeIdFlag(balancesGetCmd)
+
 	addOutputFormatFlag(balancesGetCmd)
 
 	return balancesGetCmd

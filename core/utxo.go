@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	utxoPrefix   = []byte("utxo-")
+	utxoPrefix   = []byte("tx/")
 	prefixLength = len(utxoPrefix)
 )
 
@@ -15,7 +15,7 @@ type UTXOSet struct {
 	Blockchain *Blockchain
 }
 
-func (u UTXOSet) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[string][]int, error) {
+func (u *UTXOSet) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[string][]int, error) {
 	unspentOuts := make(map[string][]int)
 	accumulated := 0
 	db := u.Blockchain.Db
@@ -30,27 +30,25 @@ func (u UTXOSet) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[s
 			item := it.Item()
 			k := item.Key()
 
-			var outs TxOutputs
 			if err := item.Value(func(val []byte) error {
-				outputs, err := DeserializeOutputs(val)
+				outs, err := DeserializeOutputs(val)
 				if err != nil {
 					return err
-				} else {
-					outs = outputs
 				}
+
+				k = bytes.TrimPrefix(k, utxoPrefix)
+				txID := hex.EncodeToString(k)
+
+				for outIdx, out := range outs.Outputs {
+					if out.IsLockedWithKey(pubKeyHash) && accumulated < amount {
+						accumulated += out.Value
+						unspentOuts[txID] = append(unspentOuts[txID], outIdx)
+					}
+				}
+
 				return nil
 			}); err != nil {
 				return err
-			}
-
-			k = bytes.TrimPrefix(k, utxoPrefix)
-			txID := hex.EncodeToString(k)
-
-			for outIdx, out := range outs.Outputs {
-				if out.IsLockedWithKey(pubKeyHash) && accumulated < amount {
-					accumulated += out.Value
-					unspentOuts[txID] = append(unspentOuts[txID], outIdx)
-				}
 			}
 		}
 		return nil
@@ -61,7 +59,7 @@ func (u UTXOSet) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[s
 	return accumulated, unspentOuts, nil
 }
 
-func (u UTXOSet) FindUnspentTransactions(pubKeyHash []byte) ([]TxOutput, error) {
+func (u *UTXOSet) FindUnspentTransactions(pubKeyHash []byte) ([]TxOutput, error) {
 	var UTXOs []TxOutput
 
 	db := u.Blockchain.Db
@@ -103,7 +101,7 @@ func (u UTXOSet) FindUnspentTransactions(pubKeyHash []byte) ([]TxOutput, error) 
 	return UTXOs, nil
 }
 
-func (u UTXOSet) CountTransactions() (int, error) {
+func (u *UTXOSet) CountTransactions() (int, error) {
 	db := u.Blockchain.Db
 	counter := 0
 
@@ -124,7 +122,7 @@ func (u UTXOSet) CountTransactions() (int, error) {
 	return counter, nil
 }
 
-func (u UTXOSet) Reindex() error {
+func (u *UTXOSet) Reindex() error {
 	db := u.Blockchain.Db
 
 	if err := u.DeleteByPrefix(utxoPrefix); err != nil {
@@ -165,6 +163,8 @@ func (u *UTXOSet) Update(block *Block) error {
 		for _, tx := range block.Transactions {
 			// if not coinbase
 			if !tx.IsCoinbase() {
+				u.Blockchain.logger.Debugw("Processing transaction", "inputs", len(tx.Inputs))
+
 				for _, in := range tx.Inputs {
 					updatedOuts := TxOutputs{}
 					inID := append(utxoPrefix, in.ID...)
@@ -207,7 +207,10 @@ func (u *UTXOSet) Update(block *Block) error {
 						}
 					}
 				}
+			} else {
+				u.Blockchain.logger.Debug("Processing coinbase transaction")
 			}
+
 			newOutputs := TxOutputs{}
 			for _, out := range tx.Outputs {
 				newOutputs.Outputs = append(newOutputs.Outputs, out)

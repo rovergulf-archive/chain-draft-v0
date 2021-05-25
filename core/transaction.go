@@ -19,9 +19,9 @@ const subsidy = 10
 
 // Transaction represents a Bitcoin transaction
 type Transaction struct {
-	ID      []byte
-	Inputs  []TxInput
-	Outputs []TxOutput
+	ID      []byte     `json:"-" yaml:"-"`
+	Inputs  []TxInput  `json:"inputs,omitempty" yaml:"inputs,omitempty"`
+	Outputs []TxOutput `json:"outputs,omitempty" yaml:"outputs,omitempty"`
 }
 
 // Hash returns a hash of the transaction
@@ -84,7 +84,11 @@ func (tx *Transaction) SetID() {
 // CoinbaseTx creates a new coinbase transaction
 func CoinbaseTx(to, data string) *Transaction {
 	if data == "" {
-		data = fmt.Sprintf("Reward to '%s'", to)
+		randData := make([]byte, 24)
+		if _, err := rand.Read(randData); err != nil {
+			log.Panic(err)
+		}
+		data = fmt.Sprintf("%x", randData)
 	}
 
 	txIn := TxInput{
@@ -94,12 +98,12 @@ func CoinbaseTx(to, data string) *Transaction {
 		PubKey:    []byte{},
 	}
 
-	txOut := TxOutput{
-		Value: subsidy,
-		//PubKeyHash: to,
+	txOut, err := NewTxOutput(100, to)
+	if err != nil {
+		log.Panic(err)
 	}
 
-	tx := Transaction{nil, []TxInput{txIn}, []TxOutput{txOut}}
+	tx := Transaction{nil, []TxInput{txIn}, []TxOutput{*txOut}}
 	tx.SetID()
 
 	return &tx
@@ -110,11 +114,16 @@ func NewTransaction(w *accounts.Wallet, to string, amount int, UTXO *UTXOSet) (*
 	var inputs []TxInput
 	var outputs []TxOutput
 
-	pubKeyHash := accounts.PublicKeyHash(w.PublicKey)
+	pubKeyHash, err := accounts.PublicKeyHash(w.PublicKey)
+	if err != nil {
+		return nil, err
+	}
+
 	acc, validOutputs, err := UTXO.FindSpendableOutputs(pubKeyHash, amount)
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println(acc, validOutputs)
 
 	if acc < amount {
 		return nil, fmt.Errorf("error: not enough funds")
@@ -127,22 +136,33 @@ func NewTransaction(w *accounts.Wallet, to string, amount int, UTXO *UTXOSet) (*
 		}
 
 		for _, out := range outs {
-			input := TxInput{
+			inputs = append(inputs, TxInput{
 				ID:        txID,
 				Out:       out,
 				Signature: nil,
 				PubKey:    w.PublicKey,
-			}
-			inputs = append(inputs, input)
+			})
 		}
 	}
 
-	from := fmt.Sprintf("%s", w.Address())
+	from, err := w.StringAddr()
+	if err != nil {
+		return nil, err
+	}
 
-	outputs = append(outputs, *NewTxOutput(amount, to))
+	txOutput, err := NewTxOutput(amount, to)
+	if err != nil {
+		return nil, err
+	}
+	outputs = append(outputs, *txOutput)
 
 	if acc > amount {
-		outputs = append(outputs, *NewTxOutput(acc-amount, from))
+		minusTxOutput, err := NewTxOutput(acc-amount, from)
+		if err != nil {
+			return nil, err
+		}
+
+		outputs = append(outputs, *minusTxOutput)
 	}
 
 	tx := Transaction{nil, inputs, outputs}
@@ -157,57 +177,6 @@ func NewTransaction(w *accounts.Wallet, to string, amount int, UTXO *UTXOSet) (*
 
 	return &tx, nil
 }
-
-//// NewUTXOTransaction creates a new transaction
-//func NewUTXOTransaction(from, to string, amount int, bc *Blockchain) (*Transaction, error) {
-//	var inputs []TxInput
-//	var outputs []TxOutput
-//
-//	acc, validOutputs := bc.FindSpendableOutputs(from, amount)
-//	if acc < amount {
-//		return nil, fmt.Errorf("not enough funds")
-//	}
-//
-//	// Build a list of inputs
-//	for txid, outs := range validOutputs {
-//		txID, err := hex.DecodeString(txid)
-//		if err != nil {
-//			return nil, err
-//		}
-//
-//		for _, out := range outs {
-//			input := TxInput{
-//				ID:        txID,
-//				Out:       out,
-//				Signature: []byte{},
-//				PubKey:    []byte{},
-//			}
-//			inputs = append(inputs, input)
-//		}
-//	}
-//
-//	// Build a list of outputs
-//	outputs = append(outputs, TxOutput{
-//		Value: amount,
-//		//PubKeyHash: to,
-//	})
-//	if acc > amount {
-//		// a change
-//		outputs = append(outputs, TxOutput{
-//			Value: acc - amount,
-//			//PubKeyHash: from,
-//		})
-//	}
-//
-//	tx := Transaction{
-//		ID:      nil,
-//		Inputs:  inputs,
-//		Outputs: outputs,
-//	}
-//	tx.SetID()
-//
-//	return &tx, nil
-//}
 
 // TrimmedCopy creates a trimmed copy of Transaction to be used in signing
 func (tx *Transaction) TrimmedCopy() Transaction {
@@ -245,15 +214,15 @@ func (tx *Transaction) Sign(privKey ecdsa.PrivateKey, prevTXs map[string]Transac
 
 	txCopy := tx.TrimmedCopy()
 
-	for inID, vin := range txCopy.Inputs {
+	for inID, in := range txCopy.Inputs {
 		txId, err := txCopy.Hash()
 		if err != nil {
 			return err
 		}
 
-		prevTx := prevTXs[hex.EncodeToString(vin.ID)]
+		prevTx := prevTXs[hex.EncodeToString(in.ID)]
 		txCopy.Inputs[inID].Signature = nil
-		txCopy.Inputs[inID].PubKey = prevTx.Outputs[vin.Out].PubKeyHash
+		txCopy.Inputs[inID].PubKey = prevTx.Outputs[in.Out].PubKeyHash
 		txCopy.ID = txId
 		txCopy.Inputs[inID].PubKey = nil
 
@@ -275,9 +244,9 @@ func (tx *Transaction) Verify(prevTXs map[string]Transaction) error {
 		return nil
 	}
 
-	for _, vin := range tx.Inputs {
-		if prevTXs[hex.EncodeToString(vin.ID)].ID == nil {
-			return fmt.Errorf("ERROR: Previous transaction is not correct")
+	for _, in := range tx.Inputs {
+		if prevTXs[hex.EncodeToString(in.ID)].ID == nil {
+			return fmt.Errorf("Previous transaction not correct")
 		}
 	}
 
@@ -308,7 +277,7 @@ func (tx *Transaction) Verify(prevTXs map[string]Transaction) error {
 		x.SetBytes(vin.PubKey[:(keyLen / 2)])
 		y.SetBytes(vin.PubKey[(keyLen / 2):])
 
-		rawPubKey := ecdsa.PublicKey{curve, &x, &y}
+		rawPubKey := ecdsa.PublicKey{Curve: curve, X: &x, Y: &y}
 		if ecdsa.Verify(&rawPubKey, txCopy.ID, &r, &s) == false {
 			return fmt.Errorf("invalid transaction")
 		}
@@ -321,21 +290,21 @@ func (tx *Transaction) Verify(prevTXs map[string]Transaction) error {
 func (tx Transaction) String() string {
 	var lines []string
 
-	lines = append(lines, fmt.Sprintf("--- Transaction %x:", tx.ID))
+	lines = append(lines, fmt.Sprintf("--- Transaction [%x]:", tx.ID))
 
 	for i, input := range tx.Inputs {
 
-		lines = append(lines, fmt.Sprintf("     Input %d:", i))
-		lines = append(lines, fmt.Sprintf("       TXID:      %x", input.ID))
-		lines = append(lines, fmt.Sprintf("       Out:       %d", input.Out))
-		lines = append(lines, fmt.Sprintf("       Signature: %x", input.Signature))
-		lines = append(lines, fmt.Sprintf("       PubKey:    %x", input.PubKey))
+		lines = append(lines, fmt.Sprintf("	Input: %d:", i))
+		lines = append(lines, fmt.Sprintf("	  TXID:      %x", input.ID))
+		lines = append(lines, fmt.Sprintf("	  Out:       %d", input.Out))
+		lines = append(lines, fmt.Sprintf("	  Signature: %x", input.Signature))
+		lines = append(lines, fmt.Sprintf("	  PubKey:    %x", input.PubKey))
 	}
 
 	for i, output := range tx.Outputs {
-		lines = append(lines, fmt.Sprintf("     Output %d:", i))
-		lines = append(lines, fmt.Sprintf("       Value:  %d", output.Value))
-		lines = append(lines, fmt.Sprintf("       Script: %x", output.PubKeyHash))
+		lines = append(lines, fmt.Sprintf("	Output: %d:", i))
+		lines = append(lines, fmt.Sprintf("	  Value:  %d", output.Value))
+		lines = append(lines, fmt.Sprintf("	  Script: %x", output.PubKeyHash))
 	}
 
 	return strings.Join(lines, "\n")

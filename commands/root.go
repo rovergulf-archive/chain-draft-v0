@@ -2,12 +2,16 @@ package commands
 
 import (
 	"fmt"
-	"github.com/dgraph-io/badger/v3"
 	homedir "github.com/mitchellh/go-homedir"
+	"github.com/opentracing/opentracing-go"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/uber/jaeger-client-go"
+	"github.com/uber/jaeger-client-go/config"
+	"github.com/uber/jaeger-lib/metrics/prometheus"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"io"
 	"log"
 	"os"
 )
@@ -15,7 +19,8 @@ import (
 var (
 	cfgFile, dataDir string
 	logger           *zap.SugaredLogger
-	badgerOpts       badger.Options
+	//bc *core.Blockchain
+	//node *node.Node
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -46,20 +51,16 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
 	// config
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.rnt.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.rbn/config.yaml)")
 
-	// logger opts
+	// logger & debug opts
 	rootCmd.PersistentFlags().Bool("log_json", false, "Enable JSON formatted logs output")
 	rootCmd.PersistentFlags().Int("log_level", int(zapcore.DebugLevel), "Log level")
 	rootCmd.PersistentFlags().Bool("log_stacktrace", false, "Log stacktrace verbose")
 
 	// main flags
-	rootCmd.PersistentFlags().StringVar(&dataDir, "data_dir", "tmp", "Blockchain data directory")
+	rootCmd.PersistentFlags().StringVar(&dataDir, "data_dir", os.Getenv("DATA_DIR"), "Blockchain data directory")
 
 	// bind viper values
 	bindViperPersistentFlag(rootCmd, "jaeger_trace_url", "jaeger_trace")
@@ -67,6 +68,7 @@ func init() {
 	bindViperPersistentFlag(rootCmd, "log_level", "log_level")
 	bindViperPersistentFlag(rootCmd, "log_stacktrace", "log_stacktrace")
 	bindViperPersistentFlag(rootCmd, "data_dir", "data_dir")
+	bindViperPersistentFlag(rootCmd, "node_id", "node-id")
 
 	// show version
 	rootCmd.Flags().BoolP("version", "v", false, "Display version")
@@ -87,8 +89,9 @@ func initConfig() {
 			os.Exit(1)
 		}
 
-		// Search config in home directory with name "config.yaml".
+		// Search config in $HOME and /opt/rbn directory with name "config.yaml".
 		viper.AddConfigPath(home)
+		viper.AddConfigPath("/opt/rbn")
 		viper.SetConfigType("yaml")
 		viper.SetConfigName("config.yaml")
 	}
@@ -104,14 +107,14 @@ func initConfig() {
 }
 
 func setConfigDefaults() {
-
 	viper.SetDefault("metrics", true)
 	viper.SetDefault("metrics_port", 8080)
 	viper.SetDefault("jaeger_trace", os.Getenv("JAEGER_TRACE"))
 
 	viper.SetDefault("data_dir", "tmp")
-	viper.SetDefault("root", "0x09ee50f2f37fcba1845de6fe5c762e83e65e755c")
-	viper.SetDefault("miner", "0x0000000000000000000000000000000000000000")
+	viper.SetDefault("backup_dir", backupsDir)
+	viper.SetDefault("node_id", "")
+	viper.SetDefault("address", "")
 
 	// ssl configuration
 	viper.SetDefault("ssl.enabled", false)
@@ -122,30 +125,30 @@ func setConfigDefaults() {
 	viper.SetDefault("ssl.verify", false)
 
 	// bootstrap server
-	viper.SetDefault("bootstrap.addr", "0.0.0.0") // swarm.rovergulf.net
-	viper.SetDefault("bootstrap.port", 9420)
+	viper.SetDefault("network.host", "127.0.0.1:9420") // swarm.rovergulf.net:443
 
 	// http server
-	viper.SetDefault("http.addr", "0.0.0.0")
-	viper.SetDefault("http.port", 9000)
+	viper.SetDefault("node.addr", "127.0.0.1")
+	viper.SetDefault("node.port", 9000)
+	viper.SetDefault("node.sync_interval", 5)
 
 	// TBD
 	// Runtime configuration
-	//viper.SetDefault("runtime.max_cpu", runtime.NumCPU())
-	//viper.SetDefault("runtime.max_mem", getAvailableOSMemory())
+	//viper.SetDefault("runtime.max_cpu", runtime.NumCPU()) // take 2/3 available by default
+	//viper.SetDefault("runtime.max_mem", getAvailableOSMemory()) // same as above
 
 }
 
 // initializes zap.SugaredLogger instance for logger
 func initZapLogger() {
-	config := zap.NewDevelopmentConfig()
-	config.Development = viper.GetBool("dev")
-	config.DisableStacktrace = viper.GetBool("log_stacktrace")
+	cfg := zap.NewDevelopmentConfig()
+	cfg.Development = viper.GetBool("dev")
+	cfg.DisableStacktrace = !viper.GetBool("log_stacktrace")
 
 	if logJson := viper.GetBool("log_json"); logJson {
-		config.Encoding = "json"
+		cfg.Encoding = "json"
 	} else {
-		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+		cfg.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	}
 
 	logLevel, ok := viper.Get("log_level").(int)
@@ -153,12 +156,40 @@ func initZapLogger() {
 		logLevel = int(zapcore.DebugLevel)
 	}
 
-	config.Level = zap.NewAtomicLevelAt(zapcore.Level(logLevel))
-	l, err := config.Build()
+	cfg.Level = zap.NewAtomicLevelAt(zapcore.Level(logLevel))
+	l, err := cfg.Build()
 	if err != nil {
 		log.Fatalf("Failed to run zap logger: %s", err)
 	}
 
 	logger = l.Sugar()
 	viper.Set("logger", logger)
+}
+
+func initOpentracing(address string) (opentracing.Tracer, io.Closer, error) {
+	metrics := prometheus.New()
+
+	traceTransport, err := jaeger.NewUDPTransport(address, 0)
+	if err != nil {
+		logger.Errorf("Unable to setup tracing agent connection: %s", err)
+		return nil, nil, err
+	}
+
+	tracer, closer, err := config.Configuration{
+		ServiceName: "rbn",
+	}.NewTracer(
+		config.Sampler(jaeger.NewConstSampler(true)),
+		config.Reporter(jaeger.NewRemoteReporter(
+			traceTransport,
+			jaeger.ReporterOptions.Logger(jaeger.StdLogger)),
+		),
+		config.Metrics(metrics),
+	)
+	if err != nil {
+		logger.Errorf("Unable to start tracer: %s", err)
+		return nil, nil, err
+	}
+
+	logger.Debugw("Jaeger tracing client initialized", "collector_url", address)
+	return tracer, closer, nil
 }

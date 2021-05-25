@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"github.com/rovergulf/rbn/accounts"
 	"github.com/rovergulf/rbn/core"
+	"github.com/rovergulf/rbn/pkg/config"
 	"github.com/rovergulf/rbn/pkg/response"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -10,18 +12,46 @@ import (
 	"path"
 )
 
-func getDbFilePath() string {
-	return path.Join(viper.GetString("data_dir"), "chain.db")
+func getNodeDataPath() string {
+	return path.Join(viper.GetString("data_dir"), viper.GetString("node_id"))
 }
 
-func getBlockchainConfig(cmd *cobra.Command) core.Options {
-	bcAddr, _ := cmd.Flags().GetString("address")
+func getBackupDirPath() string {
+	return path.Join(getNodeDataPath(), viper.GetString("backup_dir"))
+}
 
-	return core.Options{
-		DbFilePath: getDbFilePath(),
-		Logger:     logger,
-		Address:    bcAddr,
+func getDbFilePath() string {
+	return path.Join(getNodeDataPath(), core.DbFileName)
+}
+
+func getWalletFilePath() string {
+	return path.Join(getNodeDataPath(), accounts.DbWalletFile)
+}
+
+func getBlockchainConfig(cmd *cobra.Command) config.Options {
+	address := viper.GetString("address")
+	nodeId := viper.GetString("node_id")
+
+	if len(nodeId) == 0 {
+		nodeId, _ = cmd.Flags().GetString("node-id")
+		viper.Set("node_id", nodeId)
 	}
+
+	if len(address) == 0 {
+		address, _ = cmd.Flags().GetString("address")
+		viper.Set("address", address)
+	}
+
+	opts := config.Options{
+		Address: address,
+		NodeId:  nodeId,
+		Logger:  logger,
+	}
+
+	opts.DbFilePath = getDbFilePath()
+	opts.WalletsFilePath = getWalletFilePath()
+
+	return opts
 }
 
 func writeOutput(cmd *cobra.Command, v interface{}) error {
@@ -51,4 +81,12 @@ func addOutputFormatFlag(cmd *cobra.Command) {
 
 func addAddressFlag(cmd *cobra.Command) {
 	cmd.Flags().StringP("address", "a", "", "Blockchain address")
+	cmd.MarkFlagRequired("address")
+	bindViperFlag(cmd, "address", "address")
+}
+
+func addNodeIdFlag(cmd *cobra.Command) {
+	cmd.Flags().String("node-id", os.Getenv("NODE_ID"), "Blockchain node id")
+	cmd.MarkFlagRequired("node-id")
+	bindViperFlag(cmd, "node_id", "node-id")
 }

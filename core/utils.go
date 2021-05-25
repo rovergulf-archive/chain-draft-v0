@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"encoding/binary"
+	"go.uber.org/zap"
 	"log"
 )
 
@@ -15,4 +16,8 @@ func IntToHex(num int64) []byte {
 	}
 
 	return buff.Bytes()
+}
+
+func (bc *Blockchain) GetLogger() *zap.SugaredLogger {
+	return bc.logger
 }

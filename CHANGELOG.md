@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
+## 25 May 2021
+
+### Added
+- CLI backup and balances commands templates
+- prepared Node and PeerNode structs to handle network
+
+### Changed
+- config package containing common options
+
+### Fixed
+
+### Removed
+
+
+## 24 May 2021
+
+### Changed
+- Updated CLI usage
+- badger db setup moved to separate package
+
+
+## 23 May 2021
+
+### Added
+- bitcoin base58 encoded wallet address support
+- TODO: change to [etherium based address](https://pkg.go.dev/github.com/ethereum/go-ethereum/crypto/secp256k1) using `secp256k1`
+- node package to handle blockchain peers
+
+### Fixed
+- blockchain init/continue handlers
+
+
 ## 22 May 2021
 
 ### Added
@@ -13,10 +45,6 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - updated transactions
-
-### Fixed
-
-### Removed
 
 
 ## 21 May 2021
