@@ -19,7 +19,7 @@ require (
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pelletier/go-toml v1.9.1 // indirect
 	github.com/prometheus/client_golang v1.0.0
-	github.com/prometheus/client_model v0.1.0
+	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/prom2json v1.3.0
 	github.com/spf13/afero v1.6.0 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
