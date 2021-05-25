@@ -4,77 +4,15 @@ import (
 	"context"
 	"fmt"
 	"github.com/gorilla/mux"
-	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prom2json"
 	"github.com/rovergulf/rbn/pkg/response"
 	"github.com/rovergulf/rbn/pkg/version"
-	"go.uber.org/zap"
 	"net/http"
 	"strings"
 	"time"
 )
-
-var allowedHeaders = []string{
-	"Accept",
-	"Content-Type",
-	"Content-Length",
-	"Cookie",
-	"Accept-Encoding",
-	"Authorization",
-	"X-CSRF-Token",
-	"X-Requested-With",
-	"X-Node-ID",
-}
-
-var allowedMethods = []string{
-	"OPTIONS",
-	"GET",
-	"PUT",
-	"PATCH",
-	"POST",
-	"DELETE",
-}
-
-type httpServer struct {
-	router *mux.Router
-	tracer opentracing.Tracer
-	logger *zap.SugaredLogger
-}
-
-// ServeHTTP wraps http.Server ServeHTTP method to handle preflight requests
-func (h *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	// Set request headers for AJAX requests
-	if origin := r.Header.Get("Origin"); origin != "" {
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
-		w.Header().Set("Access-Control-Allow-Headers", strings.Join(allowedHeaders, ", "))
-		w.Header().Set("Access-Control-Allow-Methods", strings.Join(allowedMethods, ", "))
-	}
-
-	// handle preflight request
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	if h.tracer != nil {
-		span := h.tracer.StartSpan(strings.TrimPrefix(r.URL.Path, "/"))
-		span.SetTag("host", r.Host)
-		span.SetTag("method", r.Method)
-		span.SetTag("path", r.URL.Path)
-		span.SetTag("query", r.URL.RawQuery)
-		defer span.Finish()
-		ctx = opentracing.ContextWithSpan(ctx, span)
-	}
-
-	h.logger.Infow("Handling request", "method", r.Method, "path", r.URL.Path, "query", r.URL.RawQuery)
-
-	h.router.ServeHTTP(w, r.WithContext(ctx))
-}
 
 func (n *Node) serveHttp() error {
 	r := n.httpHandler.router
