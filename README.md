@@ -1,3 +1,6 @@
+![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/rovergulf/rbn)
+![GitHub tag (latest SemVer)](https://img.shields.io/github/v/tag/rovergulf/rbn)
+
 ## Rovergulf Blockchain Network
 
 [RBN](https://chain.rovergulf.net) - Blockchain algorithm implemented by Rovergulf Engineers team
