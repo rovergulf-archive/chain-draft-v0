@@ -7,6 +7,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prom2json"
+	"github.com/rovergulf/rbn/accounts"
+	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/pkg/response"
 	"github.com/rovergulf/rbn/pkg/version"
 	"net/http"
@@ -23,13 +25,12 @@ func (n *Node) serveHttp() error {
 	r.HandleFunc("/routes", n.WalkRoutes).Methods(http.MethodGet)
 
 	r.HandleFunc(endpointStatus, n.NodeStatus).Methods(http.MethodGet)
-	r.HandleFunc(endpointAddPeer, n.AddPeerNode).Methods(http.MethodGet)
-	r.HandleFunc(endpointSync, n.SyncPeers).Methods(http.MethodGet)
 
-	r.HandleFunc("/balances/list", n.ListBalances).Methods(http.MethodGet)
+	r.HandleFunc("/balances", n.ListBalances).Methods(http.MethodGet)
+	r.HandleFunc("/balances/{addr}", n.GetBalance).Methods(http.MethodGet)
 	r.HandleFunc("/tx/add", n.TxAdd).Methods(http.MethodGet)
 
-	return http.ListenAndServe(n.metadata.TcpAddress(), r)
+	return http.ListenAndServe(n.metadata.ApiAddress(), &n.httpHandler)
 }
 
 func (n *Node) httpResponse(w http.ResponseWriter, i interface{}, statusCode ...int) {
@@ -61,7 +62,7 @@ func (n *Node) DiscoverMetrics(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	metricsUrl := fmt.Sprintf("%s/metrics", n.metadata.HttpAddress())
+	metricsUrl := fmt.Sprintf("%s/metrics", n.metadata.HttpApiAddress())
 	req, err := http.Get(metricsUrl)
 	if err != nil {
 		n.logger.Errorf("Unable to send request to prometheus metrics: %s", err)
@@ -161,6 +162,38 @@ func (n *Node) ListBalances(w http.ResponseWriter, r *http.Request) {
 	//ctx := r.Context()
 	n.logger.Debug("http server ListBalances called")
 	n.httpResponse(w, true, http.StatusNotImplemented)
+}
+
+func (n *Node) GetBalance(w http.ResponseWriter, r *http.Request) {
+	//ctx := r.Context()
+	vars := mux.Vars(r)
+	addr := vars["addr"]
+
+	pubKeyHash, err := accounts.Base58Decode([]byte(addr))
+	if err != nil {
+		n.logger.Errorf("Unable to decode wallet address: %s", err)
+		n.httpResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	UTXOSet := core.UTXOSet{Blockchain: n.bc}
+
+	balance := 0
+	pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-4]
+	UTXOs, err := UTXOSet.FindUnspentTransactions(pubKeyHash)
+	if err != nil {
+		n.httpResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	for _, out := range UTXOs {
+		balance += out.Value
+	}
+
+	n.httpResponse(w, map[string]interface{}{
+		"address": addr,
+		"balance": balance,
+	})
 }
 
 func (n *Node) TxAdd(w http.ResponseWriter, r *http.Request) {

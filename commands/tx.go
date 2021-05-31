@@ -122,6 +122,10 @@ func txSendCmd() *cobra.Command {
 				return fmt.Errorf("sender address is not Valid")
 			}
 
+			if amount <= 0 {
+				return fmt.Errorf("amount must be more than 0")
+			}
+
 			opts := getBlockchainConfig(cmd)
 
 			bc, err := core.ContinueBlockchain(opts)
@@ -137,6 +141,7 @@ func txSendCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			defer wallets.Shutdown()
 
 			wallet, err := wallets.GetWallet(from)
 			if err != nil {
@@ -160,9 +165,8 @@ func txSendCmd() *cobra.Command {
 
 				return UTXOSet.Update(block)
 			} else {
-				logger.Debug("Send tx")
 				return fmt.Errorf("not implemented")
-				//return node.SendTx(viper.GetString("node_id"), "",tx)
+				//return node.SendTx(viper.GetString("node_id"), tx)
 			}
 		},
 		TraverseChildren: true,
@@ -170,7 +174,7 @@ func txSendCmd() *cobra.Command {
 
 	txSendCmd.Flags().Bool("miner", false, "Mine block")
 	txSendCmd.Flags().String("to", "", "Receiver address")
-	txSendCmd.Flags().String("amount", "", "Transaction coin amount")
+	txSendCmd.Flags().Int("amount", 0, "Transaction coin amount")
 	txSendCmd.MarkFlagRequired("to")
 	txSendCmd.MarkFlagRequired("amount")
 

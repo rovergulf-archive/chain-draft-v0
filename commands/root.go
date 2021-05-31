@@ -108,7 +108,6 @@ func initConfig() {
 
 func setConfigDefaults() {
 	viper.SetDefault("metrics", true)
-	viper.SetDefault("metrics_port", 8080)
 	viper.SetDefault("jaeger_trace", os.Getenv("JAEGER_TRACE"))
 
 	viper.SetDefault("data_dir", "tmp")
@@ -131,6 +130,10 @@ func setConfigDefaults() {
 	viper.SetDefault("node.addr", "127.0.0.1")
 	viper.SetDefault("node.port", 9000)
 	viper.SetDefault("node.sync_interval", 5)
+	viper.SetDefault("node.cache_dir", "")
+
+	viper.SetDefault("http.addr", "127.0.0.1")
+	viper.SetDefault("http.port", 8080)
 
 	// TBD
 	// Runtime configuration

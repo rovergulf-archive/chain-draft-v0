@@ -15,8 +15,6 @@ import (
 	"strings"
 )
 
-const subsidy = 10
-
 // Transaction represents a Bitcoin transaction
 type Transaction struct {
 	ID      []byte     `json:"-" yaml:"-"`
@@ -62,23 +60,19 @@ func DeserializeTransaction(data []byte) (*Transaction, error) {
 	return &transaction, nil
 }
 
-// IsCoinbase checks whether the transaction is coinbase
-func (tx Transaction) IsCoinbase() bool {
-	return len(tx.Inputs) == 1 && len(tx.Inputs[0].ID) == 0 && tx.Inputs[0].Out == -1
-}
-
 // SetID sets ID of a transaction
-func (tx *Transaction) SetID() {
+func (tx *Transaction) SetID() error {
 	var encoded bytes.Buffer
 	var hash [32]byte
 
 	enc := gob.NewEncoder(&encoded)
-	err := enc.Encode(tx)
-	if err != nil {
-		log.Panic(err)
+	if err := enc.Encode(tx); err != nil {
+		return err
 	}
 	hash = sha256.Sum256(encoded.Bytes())
 	tx.ID = hash[:]
+
+	return nil
 }
 
 // CoinbaseTx creates a new coinbase transaction
@@ -104,9 +98,16 @@ func CoinbaseTx(to, data string) *Transaction {
 	}
 
 	tx := Transaction{nil, []TxInput{txIn}, []TxOutput{*txOut}}
-	tx.SetID()
+	if err := tx.SetID(); err != nil {
+		log.Panic(err)
+	}
 
 	return &tx
+}
+
+// IsCoinbase checks whether the transaction is coinbase
+func (tx Transaction) IsCoinbase() bool {
+	return len(tx.Inputs) == 1 && len(tx.Inputs[0].ID) == 0 && tx.Inputs[0].Out == -1
 }
 
 // NewTransaction creates a new transaction
@@ -123,7 +124,6 @@ func NewTransaction(w *accounts.Wallet, to string, amount int, UTXO *UTXOSet) (*
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(acc, validOutputs)
 
 	if acc < amount {
 		return nil, fmt.Errorf("error: not enough funds")
@@ -136,12 +136,13 @@ func NewTransaction(w *accounts.Wallet, to string, amount int, UTXO *UTXOSet) (*
 		}
 
 		for _, out := range outs {
-			inputs = append(inputs, TxInput{
+			inp := TxInput{
 				ID:        txID,
 				Out:       out,
 				Signature: nil,
 				PubKey:    w.PublicKey,
-			})
+			}
+			inputs = append(inputs, inp)
 		}
 	}
 
@@ -165,17 +166,22 @@ func NewTransaction(w *accounts.Wallet, to string, amount int, UTXO *UTXOSet) (*
 		outputs = append(outputs, *minusTxOutput)
 	}
 
-	tx := Transaction{nil, inputs, outputs}
-	tx.ID, err = tx.Hash()
-	if err != nil {
+	tx := &Transaction{
+		Inputs:  inputs,
+		Outputs: outputs,
+	}
+
+	if txId, err := tx.Hash(); err != nil {
+		return nil, err
+	} else {
+		tx.ID = txId
+	}
+
+	if err := UTXO.Blockchain.SignTransaction(tx, w.PrivateKey); err != nil {
 		return nil, err
 	}
 
-	if err := UTXO.Blockchain.SignTransaction(&tx, w.PrivateKey); err != nil {
-		return nil, err
-	}
-
-	return &tx, nil
+	return tx, nil
 }
 
 // TrimmedCopy creates a trimmed copy of Transaction to be used in signing
@@ -228,7 +234,7 @@ func (tx *Transaction) Sign(privKey ecdsa.PrivateKey, prevTXs map[string]Transac
 
 		r, s, err := ecdsa.Sign(rand.Reader, &privKey, txCopy.ID)
 		if err != nil {
-			log.Panic(err)
+			return err
 		}
 		signature := append(r.Bytes(), s.Bytes()...)
 
@@ -290,10 +296,9 @@ func (tx *Transaction) Verify(prevTXs map[string]Transaction) error {
 func (tx Transaction) String() string {
 	var lines []string
 
-	lines = append(lines, fmt.Sprintf("--- Transaction [%x]:", tx.ID))
+	lines = append(lines, fmt.Sprintf("---	Transaction [%x]:", tx.ID))
 
 	for i, input := range tx.Inputs {
-
 		lines = append(lines, fmt.Sprintf("	Input: %d:", i))
 		lines = append(lines, fmt.Sprintf("	  TXID:      %x", input.ID))
 		lines = append(lines, fmt.Sprintf("	  Out:       %d", input.Out))
@@ -307,5 +312,5 @@ func (tx Transaction) String() string {
 		lines = append(lines, fmt.Sprintf("	  Script: %x", output.PubKeyHash))
 	}
 
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, "\n") + "\n"
 }

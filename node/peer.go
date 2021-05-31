@@ -5,11 +5,14 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/dgraph-io/badger/v3"
+	"github.com/spf13/viper"
 )
 
 var (
 	peerPrefix = []byte("peers/")
 )
+
+type knownPeers map[string]PeerNode
 
 // PeerNode represents distributed node network metadata
 type PeerNode struct {
@@ -46,9 +49,14 @@ func (pn *PeerNode) ApiProtocol() string {
 	return "http"
 }
 
-// HttpAddress returns HTTP server address
-func (pn *PeerNode) HttpAddress() string {
-	return fmt.Sprintf("%s://%s", pn.ApiProtocol(), pn.TcpAddress())
+// ApiAddress returns HTTP server listen address
+func (pn *PeerNode) ApiAddress() string {
+	return fmt.Sprintf("%s:%s", viper.GetString("http.addr"), viper.GetString("http.port"))
+}
+
+// HttpApiAddress returns full API server URL
+func (pn *PeerNode) HttpApiAddress() string {
+	return fmt.Sprintf("%s://%s", pn.ApiProtocol(), pn.ApiAddress())
 }
 
 // GetId returns node peer id

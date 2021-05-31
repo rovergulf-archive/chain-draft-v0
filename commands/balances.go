@@ -5,7 +5,6 @@ import (
 	"github.com/rovergulf/rbn/accounts"
 	"github.com/rovergulf/rbn/core"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 // balancesCmd represents the balances command
@@ -35,7 +34,7 @@ func balancesListCmd() *cobra.Command {
 			}
 			defer bc.Shutdown()
 
-			balance := 0
+			var balances []int
 			UTXOs, err := bc.FindUTXO()
 			if err != nil {
 				return err
@@ -43,15 +42,14 @@ func balancesListCmd() *cobra.Command {
 
 			for _, out := range UTXOs {
 				for i := range out.Outputs {
-					logger.Infof("out.Outputs[%d].Value: %d", i, out.Outputs[i].Value)
+					output := out.Outputs[i]
+					balances = append(balances, output.Value)
 				}
-				balance += out.Outputs[0].Value
 			}
 
-			result := map[string]interface{}{
-				"balance": balance,
-			}
-			return writeOutput(cmd, result)
+			return writeOutput(cmd, map[string]interface{}{
+				"balances": balances,
+			})
 		},
 	}
 
@@ -67,7 +65,7 @@ func balancesGetCmd() *cobra.Command {
 		Use:   "get",
 		Short: "Get blockchain address balance.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			address := viper.GetString("address")
+			address, _ := cmd.Flags().GetString("address")
 			if len(address) > 0 {
 				if !accounts.ValidateAddress(address) {
 					return fmt.Errorf("invalid address")
@@ -76,20 +74,28 @@ func balancesGetCmd() *cobra.Command {
 
 			bc, err := core.ContinueBlockchain(getBlockchainConfig(cmd))
 			if err != nil {
-				logger.Error("Unable to start blockchain: %s", err)
+				logger.Errorf("Unable to start blockchain: %s", err)
 				return err
 			}
 			defer bc.Shutdown()
 
+			pubKeyHash, err := accounts.Base58Decode([]byte(address))
+			if err != nil {
+				logger.Errorf("Unable to decode wallet address: %s", err)
+				return err
+			}
+
+			UTXOSet := core.UTXOSet{Blockchain: bc}
+
 			balance := 0
-			UTXOs, err := bc.FindUTXO()
+			pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-4]
+			UTXOs, err := UTXOSet.FindUnspentTransactions(pubKeyHash)
 			if err != nil {
 				return err
 			}
 
 			for _, out := range UTXOs {
-				fmt.Println("out.Outputs[0].Value:", out.Outputs[0].Value)
-				balance += out.Outputs[0].Value
+				balance += out.Value
 			}
 
 			return writeOutput(cmd, map[string]interface{}{

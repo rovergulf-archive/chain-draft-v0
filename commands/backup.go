@@ -8,20 +8,20 @@ const (
 	backupsDir = "backups"
 )
 
-// backupCmd represents the balances command
-var backupCmd = &cobra.Command{
-	Use:          "backup",
-	Short:        "Backup blockchain and wallet node",
-	Long:         ``,
-	SilenceUsage: true,
-}
-
 func init() {
 	// new
 	rootCmd.AddCommand(backupCmd)
 	backupCmd.AddCommand(backupNewCmd())
 	backupCmd.AddCommand(backupListCmd())
 	backupCmd.AddCommand(backupRestoreCmd())
+}
+
+// backupCmd represents the balances command
+var backupCmd = &cobra.Command{
+	Use:          "backup",
+	Short:        "Backup blockchain and wallet node",
+	Long:         ``,
+	SilenceUsage: true,
 }
 
 // backupNewCmd represents the balances list command

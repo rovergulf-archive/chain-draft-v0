@@ -21,7 +21,6 @@ type Wallets struct {
 }
 
 func InitWallets(opts config.Options) (*Wallets, error) {
-	fmt.Println("wallets file path", opts.WalletsFilePath)
 	badgerOpts := badger.DefaultOptions(opts.WalletsFilePath)
 	db, err := repo.OpenDB(opts.WalletsFilePath, badgerOpts)
 	if err != nil {

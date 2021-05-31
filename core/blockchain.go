@@ -28,7 +28,7 @@ func dbExists(filePath string) bool {
 }
 
 func NewGenesisBlock(coinbase *Transaction) *Block {
-	return NewBlock([]*Transaction{coinbase}, []byte{})
+	return NewBlock([]*Transaction{coinbase}, []byte{}, 0)
 }
 
 type Blockchain struct {
@@ -164,9 +164,6 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 					return err
 				}
 
-				bc.logger.Infow("add block", "lh", lastBlock.Hash,
-					"lh_height", lastBlock.Height,
-					"cb", block.Hash, "cb_height", block.Height)
 				if block.Height > lastBlock.Height {
 					if err := txn.Set([]byte("lh"), block.Hash); err != nil {
 						bc.logger.Errorf("Unable to set last hash value: %s", err)
@@ -174,6 +171,10 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 					}
 					bc.LastHash = block.Hash
 				}
+
+				bc.logger.Infow("Saved block", "last_hash", lastBlock.Hash,
+					"last_height", lastBlock.Height,
+					"hash", block.Hash, "height", block.Height)
 
 				return nil
 			})
@@ -184,24 +185,38 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 // MineBlock mines a new block with the provided transactions
 func (bc *Blockchain) MineBlock(transactions []*Transaction) (*Block, error) {
 	var lastHash []byte
+	var lastHeight int
 
 	if err := bc.Db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte("lh"))
+		lh, err := txn.Get([]byte("lh"))
 		if err != nil {
 			bc.logger.Errorf("Unable to get last hash value: %s", err)
 			return err
 		}
 
-		return item.Value(func(val []byte) error {
+		return lh.Value(func(val []byte) error {
 			lastHash = val
-			return nil
+			lb, err := txn.Get(val)
+			if err != nil {
+				return err
+			}
+
+			return lb.Value(func(val []byte) error {
+				lastBlock, err := DeserializeBlock(val)
+				if err != nil {
+					return err
+				} else {
+					lastHeight = lastBlock.Height
+				}
+				return nil
+			})
 		})
 	}); err != nil {
 		bc.logger.Errorf("Unable to get last hash: %s", err)
 		return nil, err
 	}
 
-	newBlock := NewBlock(transactions, lastHash)
+	newBlock := NewBlock(transactions, lastHash, lastHeight+1)
 
 	if err := bc.AddBlock(newBlock); err != nil {
 		bc.logger.Errorf("Unable to start transaction: %s", err)

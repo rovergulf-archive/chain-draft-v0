@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
+## 31 May 2021
+
+### Added
+- prepared node multiple network interfaces
+
+### Changed
+
+### Fixed
+- send command public key length
+- get wallet balance
+
+### Removed
+
+
 ## 25 May 2021
 
 ### Added
@@ -12,10 +26,6 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - config package containing common options
-
-### Fixed
-
-### Removed
 
 
 ## 24 May 2021

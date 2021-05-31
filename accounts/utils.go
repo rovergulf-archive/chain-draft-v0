@@ -4,9 +4,6 @@ import (
 	"github.com/mr-tron/base58"
 )
 
-// DigestLength is for signature digest length
-const DigestLength = 32
-
 func Base58Encode(input []byte) []byte {
 	encode := base58.Encode(input)
 

@@ -20,14 +20,16 @@ type Block struct {
 }
 
 // NewBlock creates and returns Block
-func NewBlock(txs []*Transaction, prevBlockHash []byte) *Block {
+func NewBlock(txs []*Transaction, prevBlockHash []byte, height int) *Block {
 	block := &Block{
 		Timestamp:    time.Now().Unix(),
 		Transactions: txs,
 		PrevHash:     prevBlockHash,
 		Hash:         []byte{},
+		Height:       height,
 		Nonce:        0,
 	}
+
 	pow := NewProofOfWork(block)
 	nonce, hash := pow.Run()
 

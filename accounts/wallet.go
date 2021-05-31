@@ -18,6 +18,7 @@ const (
 )
 
 type Wallet struct {
+	//Address    []byte           `json:"address" yaml:"address"`
 	PrivateKey ecdsa.PrivateKey `json:"-" yaml:"-"`
 	PublicKey  []byte           `json:"-" yaml:"-"`
 }

@@ -27,17 +27,14 @@ func nodeCmd() *cobra.Command {
 func nodeRunCmd() *cobra.Command {
 	var nodeRunCmd = &cobra.Command{
 		Use:   "run",
-		Short: "Get node status",
+		Short: "Run Rovergulf Blockchain Network peer node",
 		Long:  ``,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			opts := getBlockchainConfig(cmd)
-
-			n, err := node.New(opts)
+			n, err := node.New(getBlockchainConfig(cmd))
 			if err != nil {
 				return err
 			}
 
-			logger.Infow("Starting node", "address", opts.Address, "node_id", opts.NodeId)
 			return n.Run()
 		},
 		TraverseChildren: true,
