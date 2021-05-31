@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - send command public key length
 - get wallet balance
+- list balances command output
 
 ### Removed
 

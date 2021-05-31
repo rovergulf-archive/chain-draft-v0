@@ -34,7 +34,7 @@ func balancesListCmd() *cobra.Command {
 			}
 			defer bc.Shutdown()
 
-			var balances []int
+			balances := make(map[int]int)
 			UTXOs, err := bc.FindUTXO()
 			if err != nil {
 				return err
@@ -43,7 +43,7 @@ func balancesListCmd() *cobra.Command {
 			for _, out := range UTXOs {
 				for i := range out.Outputs {
 					output := out.Outputs[i]
-					balances = append(balances, output.Value)
+					balances[i] += output.Value
 				}
 			}
 
