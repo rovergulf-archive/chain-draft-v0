@@ -8,15 +8,12 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - prepared node multiple network interfaces
-
-### Changed
+- etherium-go SDK wallet `common.Address` support
 
 ### Fixed
 - send command public key length
 - get wallet balance
 - list balances command output
-
-### Removed
 
 
 ## 25 May 2021

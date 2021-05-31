@@ -2,9 +2,13 @@ package commands
 
 import (
 	"fmt"
-	"github.com/rovergulf/rbn/accounts"
-	"github.com/rovergulf/rbn/pkg/config"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/cmd/utils"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/console/prompt"
+	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/cobra"
+	"os"
 )
 
 func init() {
@@ -33,23 +37,20 @@ func walletsNewCmd() *cobra.Command {
 		Use:   "new",
 		Short: "Creates a new wallet.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wallets, err := accounts.InitWallets(getBlockchainConfig(cmd))
+			auth := getPassPhrase("Enter passphrase to encrypt new wallet:", true)
+
+			w, err := wallets.InitWallets(getBlockchainConfig(cmd))
 			if err != nil {
 				return err
 			}
-			defer wallets.Shutdown()
+			defer w.Shutdown()
 
-			newWallet, err := wallets.AddWallet()
-			if err != nil {
-				return err
-			}
-
-			address, err := newWallet.Address()
+			wallet, err := w.AddWallet(auth)
 			if err != nil {
 				return err
 			}
 
-			logger.Infof("Done! Wallet address: \n\t%s", address)
+			logger.Infof("Done! Wallet address: \n\t%s", wallet.Address)
 			return nil
 		},
 		TraverseChildren: true,
@@ -68,13 +69,13 @@ func walletsListCmd() *cobra.Command {
 		Short: "Lists available wallets.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts := getBlockchainConfig(cmd)
-			wallets, err := accounts.InitWallets(opts)
+			w, err := wallets.InitWallets(opts)
 			if err != nil {
 				return err
 			}
-			defer wallets.Shutdown()
+			defer w.Shutdown()
 
-			addresses, err := wallets.GetAllAddresses()
+			addresses, err := w.GetAllAddresses()
 			if err != nil {
 				return err
 			}
@@ -99,29 +100,32 @@ func walletsPrintPrivKeyCmd() *cobra.Command {
 		Short: "Unlocks keystore file and prints the Private + Public keys.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			address, _ := cmd.Flags().GetString("address")
+			if !common.IsHexAddress(address) {
+				return fmt.Errorf("bad address format")
+			}
 
-			wallets, err := accounts.InitWallets(config.Options{
-				Logger: logger,
-			})
+			auth := getPassPhrase("Enter password to decrypt the wallet:", false)
+
+			w, err := wallets.InitWallets(getBlockchainConfig(cmd))
 			if err != nil {
 				return err
 			}
-			defer wallets.Shutdown()
+			defer w.Shutdown()
 
-			wallet, err := wallets.GetWallet(address)
+			wallet, err := w.GetWallet(common.HexToAddress(address))
 			if err != nil {
 				return err
 			}
 
-			addr, err := wallet.StringAddr()
+			key, err := keystore.DecryptKey(wallet.Data, auth)
 			if err != nil {
-				return err
+				fmt.Println(err.Error())
+				os.Exit(1)
 			}
 
 			return writeOutput(cmd, map[string]interface{}{
-				"address":    addr,
-				"pk_cure":    fmt.Sprintf("%x", wallet.PrivateKey.Curve.Params()),
-				"public_key": fmt.Sprintf("%x", wallet.PublicKey),
+				"address": wallet.Address,
+				"key":     key,
 			})
 		},
 		TraverseChildren: true,
@@ -135,5 +139,21 @@ func walletsPrintPrivKeyCmd() *cobra.Command {
 }
 
 func getPassPhrase(phrase string, confirmation bool) string {
-	return ""
+	password, err := prompt.Stdin.PromptPassword(phrase)
+	if err != nil {
+		utils.Fatalf("Failed to read password: %v", err)
+	}
+
+	if confirmation {
+		confirm, err := prompt.Stdin.PromptPassword("Repeat password: ")
+		if err != nil {
+			utils.Fatalf("Failed to read password confirmation: %v", err)
+		}
+
+		if password != confirm {
+			utils.Fatalf("Passwords do not match")
+		}
+	}
+
+	return password
 }

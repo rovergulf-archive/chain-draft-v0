@@ -1,16 +1,15 @@
-package accounts
+package wallets
 
 import (
 	"bytes"
 	"crypto/elliptic"
 	"encoding/gob"
-	"fmt"
 	"github.com/dgraph-io/badger/v3"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/rovergulf/rbn/pkg/config"
 	"github.com/rovergulf/rbn/pkg/repo"
-	"github.com/spf13/viper"
 	"go.uber.org/zap"
-	"path"
 )
 
 const DbWalletFile = "wallets.db"
@@ -42,33 +41,32 @@ func (ws *Wallets) Shutdown() {
 	}
 }
 
-func (ws *Wallets) AddWallet() (*Wallet, error) {
-	wallet, err := MakeWallet()
+func (ws *Wallets) AddWallet(auth string) (*Wallet, error) {
+	key, err := NewRandomKey()
 	if err != nil {
 		return nil, err
 	}
 
-	addr, err := wallet.Address()
-	if err != nil {
-		return nil, err
-	}
-
-	val, err := wallet.Serialize()
+	encryptedKey, err := keystore.EncryptKey(key, auth, keystore.StandardScryptN, keystore.StandardScryptP)
 	if err != nil {
 		return nil, err
 	}
 
 	if err := ws.Db.Update(func(txn *badger.Txn) error {
-		return txn.Set(addr, val)
+		return txn.Set(key.Address.Bytes(), encryptedKey)
 	}); err != nil {
 		return nil, err
+	}
+
+	wallet := &Wallet{
+		Address: key.Address,
 	}
 
 	return wallet, nil
 }
 
-func (ws *Wallets) GetAllAddresses() ([]string, error) {
-	var addresses []string
+func (ws *Wallets) GetAllAddresses() ([]common.Address, error) {
+	var addresses []common.Address
 
 	if err := ws.Db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
@@ -77,7 +75,7 @@ func (ws *Wallets) GetAllAddresses() ([]string, error) {
 		defer it.Close()
 		for it.Rewind(); it.Valid(); it.Next() {
 			item := it.Item()
-			addresses = append(addresses, fmt.Sprintf("%s", item.Key()))
+			addresses = append(addresses, common.BytesToAddress(item.Key()))
 		}
 		return nil
 	}); err != nil {
@@ -88,11 +86,11 @@ func (ws *Wallets) GetAllAddresses() ([]string, error) {
 	return addresses, nil
 }
 
-func (ws Wallets) GetWallet(address string) (*Wallet, error) {
+func (ws Wallets) GetWallet(address common.Address) (*Wallet, error) {
 	var w *Wallet
 
 	if err := ws.Db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(address))
+		item, err := txn.Get(address.Bytes())
 		if err != nil {
 			return err
 		}
@@ -111,10 +109,6 @@ func (ws Wallets) GetWallet(address string) (*Wallet, error) {
 	}
 
 	return w, nil
-}
-
-func walletFile() string {
-	return path.Join(viper.GetString("data_dir"), DbWalletFile)
 }
 
 func DeserializeWallets(data []byte) (map[string]Wallet, error) {
