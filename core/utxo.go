@@ -87,7 +87,6 @@ func (u *UTXOSet) FindUnspentTransactions(pubKeyHash []byte) ([]TxOutput, error)
 			}
 
 			for _, out := range outs.Outputs {
-				u.Blockchain.logger.Warn(out, out.IsLockedWithKey(pubKeyHash))
 				if out.IsLockedWithKey(pubKeyHash) {
 					UTXOs = append(UTXOs, out)
 				}
