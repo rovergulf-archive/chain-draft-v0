@@ -1,4 +1,4 @@
-package repo
+package badgerdb
 
 import (
 	"fmt"
