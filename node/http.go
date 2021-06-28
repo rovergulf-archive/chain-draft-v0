@@ -3,11 +3,11 @@ package node
 import (
 	"context"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prom2json"
-	"github.com/rovergulf/rbn/accounts"
 	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/pkg/response"
 	"github.com/rovergulf/rbn/pkg/version"
@@ -139,10 +139,10 @@ func (n *Node) NodeStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	n.httpResponse(w, StatusRes{
-		LastHash:   lb.GetHash(),
-		Number:     lb.Height,
+		LastHash:   lb.Hash.Hex(),
+		Number:     n.bc.ChainLength.Uint64(),
 		KnownPeers: n.knownPeers,
-		PendingTXs: nil,
+		PendingTXs: n.pendingTXs,
 	})
 }
 
@@ -161,7 +161,18 @@ func (n *Node) SyncPeers(w http.ResponseWriter, r *http.Request) {
 func (n *Node) ListBalances(w http.ResponseWriter, r *http.Request) {
 	//ctx := r.Context()
 	n.logger.Debug("http server ListBalances called")
-	n.httpResponse(w, true, http.StatusNotImplemented)
+
+	balances := core.Balances{
+		Blockchain: n.bc,
+	}
+
+	list, err := balances.ListBalances()
+	if err != nil {
+		n.httpResponse(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	n.httpResponse(w, list)
 }
 
 func (n *Node) GetBalance(w http.ResponseWriter, r *http.Request) {
@@ -169,31 +180,22 @@ func (n *Node) GetBalance(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	addr := vars["addr"]
 
-	pubKeyHash, err := accounts.Base58Decode([]byte(addr))
-	if err != nil {
-		n.logger.Errorf("Unable to decode wallet address: %s", err)
-		n.httpResponse(w, err.Error(), http.StatusBadRequest)
+	if !common.IsHexAddress(addr) {
+		n.httpResponse(w, fmt.Errorf("invalid address: %s", addr), http.StatusBadRequest)
 		return
 	}
 
-	UTXOSet := core.UTXOSet{Blockchain: n.bc}
+	balances := core.Balances{
+		Blockchain: n.bc,
+	}
 
-	balance := 0
-	pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-4]
-	UTXOs, err := UTXOSet.FindUnspentTransactions(pubKeyHash)
+	balance, err := balances.GetBalance(common.HexToAddress(addr))
 	if err != nil {
-		n.httpResponse(w, err.Error(), http.StatusBadRequest)
+		n.httpResponse(w, err, http.StatusBadRequest)
 		return
 	}
 
-	for _, out := range UTXOs {
-		balance += out.Value
-	}
-
-	n.httpResponse(w, map[string]interface{}{
-		"address": addr,
-		"balance": balance,
-	})
+	n.httpResponse(w, balance)
 }
 
 func (n *Node) TxAdd(w http.ResponseWriter, r *http.Request) {

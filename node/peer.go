@@ -2,9 +2,11 @@ package node
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/gob"
 	"fmt"
 	"github.com/dgraph-io/badger/v3"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/spf13/viper"
 )
 
@@ -16,16 +18,16 @@ type knownPeers map[string]PeerNode
 
 // PeerNode represents distributed node network metadata
 type PeerNode struct {
-	Ip      string `json:"ip" yaml:"ip"`
-	Port    uint64 `json:"port" yaml:"port"`
-	Root    bool   `json:"root" yaml:"root"`
-	Account string `json:"account" yaml:"account"`
+	Ip      string         `json:"ip" yaml:"ip"`
+	Port    uint64         `json:"port" yaml:"port"`
+	Root    bool           `json:"root" yaml:"root"`
+	Account common.Address `json:"account" yaml:"account"`
 
 	// Whenever my node already established connection, sync with this Peer
 	connected bool
 }
 
-func NewPeerNode(ip string, port uint64, isMain bool, address string, connected bool) PeerNode {
+func NewPeerNode(ip string, port uint64, isMain bool, address common.Address, connected bool) PeerNode {
 	return PeerNode{
 		Ip:        ip,
 		Port:      port,
@@ -60,8 +62,12 @@ func (pn *PeerNode) HttpApiAddress() string {
 }
 
 // GetId returns node peer id
-func (pn *PeerNode) GetId() string {
-	return fmt.Sprintf("")
+func (pn *PeerNode) GetId() []byte {
+	var sum []byte
+	sum = append(sum, pn.Account.Bytes()...)
+	sum = append(sum, []byte(fmt.Sprintf("%s:%d", pn.Ip, pn.Port))...)
+	hash := sha256.Sum256(sum)
+	return hash[:]
 }
 
 // addPeer adds new peer to in-memory map
@@ -74,10 +80,10 @@ func (n *Node) addPeer(peer PeerNode) error {
 	}
 
 	return n.bc.Db.Update(func(txn *badger.Txn) error {
-		if err := txn.Set([]byte(peer.GetId()), pn); err != nil {
+		if err := txn.Set(peer.GetId(), pn); err != nil {
 			return err
 		} else {
-			n.knownPeers[peer.GetId()] = peer
+			n.knownPeers[string(peer.GetId())] = peer
 		}
 		return nil
 	})
@@ -85,10 +91,10 @@ func (n *Node) addPeer(peer PeerNode) error {
 
 func (n *Node) removePeer(peer PeerNode) error {
 	return n.bc.Db.Update(func(txn *badger.Txn) error {
-		if err := txn.Delete([]byte(peer.GetId())); err != nil {
+		if err := txn.Delete(peer.GetId()); err != nil {
 			return err
 		} else {
-			delete(n.knownPeers, peer.GetId())
+			delete(n.knownPeers, string(peer.GetId()))
 		}
 
 		return nil

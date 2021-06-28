@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"fmt"
 	"github.com/rovergulf/rbn/core"
 	"github.com/spf13/cobra"
 )
@@ -22,6 +21,7 @@ func blockchainCmd() *cobra.Command {
 	blockchainCmd.AddCommand(initBlockchainCmd())
 	blockchainCmd.AddCommand(blockchainListCmd())
 	blockchainCmd.AddCommand(blockchainLastBlockCmd())
+	blockchainCmd.AddCommand(blockchainGenesisCmd())
 
 	return blockchainCmd
 }
@@ -47,8 +47,10 @@ func initBlockchainCmd() *cobra.Command {
 		TraverseChildren: true,
 	}
 
-	addAddressFlag(initBlockchainCmd)
 	addNodeIdFlag(initBlockchainCmd)
+	initBlockchainCmd.Flags().StringP("genesis", "g", "", "Genesis file path")
+	initBlockchainCmd.MarkFlagRequired("genesis")
+	bindViperFlag(initBlockchainCmd, "genesis", "genesis")
 
 	return initBlockchainCmd
 }
@@ -81,18 +83,15 @@ func blockchainListCmd() *cobra.Command {
 				}
 				limit++
 
-				pow := core.NewProofOfWork(block)
-
 				if err := writeOutput(cmd, map[string]interface{}{
-					"hash":      block.GetHash(),
-					"prev_hash": block.GetPrevHash(),
-					"pow":       fmt.Sprintf("%v", pow.Validate()),
+					"hash":      block.Hash,
+					"prev_hash": block.PrevHash,
 					"txs":       block.Transactions,
 				}); err != nil {
 					logger.Errorf("Unable to write block response: %s", err)
 				}
 
-				if len(block.PrevHash) == 0 {
+				if len(block.PrevHash.Bytes()) == 0 {
 					break
 				}
 			}
@@ -127,9 +126,7 @@ func blockchainLastBlockCmd() *cobra.Command {
 				return err
 			}
 
-			return writeOutput(cmd, map[string]interface{}{
-				"hash": block.GetHash(),
-			})
+			return writeOutput(cmd, block)
 		},
 		TraverseChildren: true,
 	}
@@ -138,4 +135,29 @@ func blockchainLastBlockCmd() *cobra.Command {
 	addOutputFormatFlag(blockchainLastBlockCmd)
 
 	return blockchainLastBlockCmd
+}
+
+func blockchainGenesisCmd() *cobra.Command {
+	var blockchainGenesisCmd = &cobra.Command{
+		Use:   "genesis",
+		Short: "Show chain genesis",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			bc, err := core.ContinueBlockchain(getBlockchainConfig(cmd))
+			if err != nil {
+				logger.Error("Unable to start blockchain: %s", err)
+				return err
+			}
+			defer bc.Shutdown()
+
+			gen, err := bc.GetGenesis()
+			if err != nil {
+				return err
+			}
+
+			return writeOutput(cmd, gen)
+		},
+		TraverseChildren: true,
+	}
+
+	return blockchainGenesisCmd
 }

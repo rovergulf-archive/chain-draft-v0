@@ -1,10 +1,10 @@
 package commands
 
 import (
-	"github.com/rovergulf/rbn/accounts"
 	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/pkg/config"
 	"github.com/rovergulf/rbn/pkg/response"
+	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"log"
@@ -25,7 +25,7 @@ func getDbFilePath() string {
 }
 
 func getWalletFilePath() string {
-	return path.Join(getNodeDataPath(), accounts.DbWalletFile)
+	return path.Join(getNodeDataPath(), wallets.DbWalletFile)
 }
 
 func getBlockchainConfig(cmd *cobra.Command) config.Options {

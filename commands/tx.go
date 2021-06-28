@@ -2,9 +2,11 @@ package commands
 
 import (
 	"fmt"
-	"github.com/rovergulf/rbn/accounts"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/rovergulf/rbn/core"
+	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/cobra"
+	"time"
 )
 
 func init() {
@@ -22,7 +24,7 @@ func txCmd() *cobra.Command {
 
 	txCmd.AddCommand(txReindexTxCmd())
 	txCmd.AddCommand(txSendCmd())
-	//txCmd.AddCommand(txGetCmd())
+	txCmd.AddCommand(txGetCmd())
 
 	return txCmd
 }
@@ -41,16 +43,7 @@ func txReindexTxCmd() *cobra.Command {
 			}
 			defer bc.Shutdown()
 
-			UTXOSet := core.UTXOSet{Blockchain: bc}
-			if err := UTXOSet.Reindex(); err != nil {
-				return err
-			}
-
-			count, err := UTXOSet.CountTransactions()
-			if err != nil {
-				return err
-			}
-
+			var count int
 			logger.Infof("Done! There are %d transactions in the UTXO set.", count)
 
 			return nil
@@ -75,20 +68,24 @@ func txGetCmd() *cobra.Command {
 				return err
 			}
 
-			//bc, err := core.ContinueBlockchain(getBlockchainConfig(cmd))
-			//if err != nil {
-			//	logger.Warnf("Unable to start blockchain: %s", err)
-			//	return err
-			//}
-			//defer bc.Shutdown()
+			bc, err := core.ContinueBlockchain(getBlockchainConfig(cmd))
+			if err != nil {
+				logger.Warnf("Unable to start blockchain: %s", err)
+				return err
+			}
+			defer bc.Shutdown()
 
-			logger.Infof("Not implemented: Get tx: %s", id)
+			tx, err := bc.FindTransaction([]byte(id))
+			if err != nil {
+				return err
+			}
 
-			return nil
+			return writeOutput(cmd, tx)
 		},
 		TraverseChildren: true,
 	}
 
+	addOutputFormatFlag(txGetCmd)
 	addNodeIdFlag(txGetCmd)
 	txGetCmd.Flags().String("id", "", "Transaction id")
 	txGetCmd.MarkFlagRequired("id")
@@ -112,13 +109,13 @@ func txSendCmd() *cobra.Command {
 			mineNow, _ := cmd.Flags().GetBool("miner")
 			from, _ := cmd.Flags().GetString("address")
 			to, _ := cmd.Flags().GetString("to")
-			amount, _ := cmd.Flags().GetInt("amount")
+			amount, _ := cmd.Flags().GetInt64("amount")
 
-			if !accounts.ValidateAddress(to) {
+			if !common.IsHexAddress(to) {
 				return fmt.Errorf("recipient address is not Valid")
 			}
 
-			if !accounts.ValidateAddress(from) {
+			if !common.IsHexAddress(from) {
 				return fmt.Errorf("sender address is not Valid")
 			}
 
@@ -135,35 +132,39 @@ func txSendCmd() *cobra.Command {
 			}
 			defer bc.Shutdown()
 
-			UTXOSet := core.UTXOSet{Blockchain: bc}
-
-			wallets, err := accounts.InitWallets(opts)
+			wm, err := wallets.NewManager(opts)
 			if err != nil {
 				return err
 			}
-			defer wallets.Shutdown()
+			defer wm.Shutdown()
 
-			wallet, err := wallets.GetWallet(from)
+			wallet, err := wm.GetWallet(common.HexToAddress(from))
 			if err != nil {
 				return err
 			}
 
-			tx, err := core.NewTransaction(wallet, to, amount, &UTXOSet)
+			tx, err := core.NewTransaction(common.HexToAddress(from), common.HexToAddress(to), amount, 0, nil)
+			if err != nil {
+				return err
+			}
+
+			signedTx, err := wallet.SignTx(tx)
 			if err != nil {
 				return err
 			}
 
 			if mineNow {
 				logger.Debug("Mine block")
-				cbTx := core.CoinbaseTx(from, "")
-				txs := []*core.Transaction{cbTx, tx}
 
-				block, err := bc.MineBlock(txs)
-				if err != nil {
+				txs := []*core.SignedTx{signedTx}
+				now := time.Now()
+
+				b := core.NewBlock(bc.LastHash, bc.ChainLength.Uint64(), 0, now.Unix(), common.HexToAddress(from), txs)
+				if err := b.SetHash(); err != nil {
 					return err
 				}
 
-				return UTXOSet.Update(block)
+				return bc.AddBlock(b)
 			} else {
 				return fmt.Errorf("not implemented")
 				//return node.SendTx(viper.GetString("node_id"), tx)

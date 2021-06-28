@@ -2,13 +2,14 @@ package core
 
 import (
 	"github.com/dgraph-io/badger/v3"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/opentracing/opentracing-go"
 	"go.uber.org/zap"
 )
 
 // BlockchainIterator is used to iterate over blockchain blocks
 type BlockchainIterator struct {
-	CurrentHash []byte
+	CurrentHash common.Hash
 	Db          *badger.DB
 	logger      *zap.SugaredLogger
 	tracer      opentracing.Tracer
@@ -31,7 +32,7 @@ func (i *BlockchainIterator) Next() (*Block, error) {
 	var block *Block
 
 	if err := i.Db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(i.CurrentHash)
+		item, err := txn.Get(i.CurrentHash.Bytes())
 		if err != nil {
 			return err
 		}

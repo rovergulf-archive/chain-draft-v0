@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/rovergulf/rbn/core"
 	"github.com/spf13/viper"
 	"net/http"
@@ -108,7 +109,7 @@ func (n *Node) syncBlocks(peer PeerNode, status *StatusRes) error {
 			return err
 		}
 
-		n.newSyncedBlocks <- block
+		n.proposedBlocks <- block
 	}
 
 	return nil
@@ -204,7 +205,7 @@ func queryPeerStatus(peer PeerNode) (*StatusRes, error) {
 	return &statusRes, nil
 }
 
-func (n *Node) fetchBlocksFromPeer(peer PeerNode, fromBlock []byte) ([]*core.Block, error) {
+func (n *Node) fetchBlocksFromPeer(peer PeerNode, fromBlock common.Hash) ([]*core.Block, error) {
 	n.logger.Infof("Importing blocks from Peer %s...\n", peer.TcpAddress())
 
 	url := fmt.Sprintf(

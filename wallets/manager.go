@@ -2,46 +2,59 @@ package wallets
 
 import (
 	"bytes"
+	"context"
 	"crypto/elliptic"
 	"encoding/gob"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/rovergulf/rbn/database/badgerdb"
 	"github.com/rovergulf/rbn/pkg/config"
-	"github.com/rovergulf/rbn/pkg/repo"
 	"go.uber.org/zap"
 )
 
 const DbWalletFile = "wallets.db"
 
-type Wallets struct {
-	Db     *badger.DB `json:"-" yaml:"-"`
-	logger *zap.SugaredLogger
+type Backend interface {
+	Put(ctx context.Context, key []byte, data []byte)
+	Get(ctx context.Context, key []byte)
+	List(ctx context.Context, prefix []byte)
+	Delete(ctx context.Context, key []byte)
 }
 
-func InitWallets(opts config.Options) (*Wallets, error) {
+type Manager struct {
+	Db *badger.DB `json:"-" yaml:"-"`
+
+	backend Backend
+
+	logger *zap.SugaredLogger
+	quit   chan struct{}
+}
+
+// NewManager returns wallets Manager instance
+func NewManager(opts config.Options) (*Manager, error) {
 	badgerOpts := badger.DefaultOptions(opts.WalletsFilePath)
-	db, err := repo.OpenDB(opts.WalletsFilePath, badgerOpts)
+	db, err := badgerdb.OpenDB(opts.WalletsFilePath, badgerOpts)
 	if err != nil {
 		opts.Logger.Errorf("Unable to open db file: %s", err)
 		return nil, err
 	}
 
-	return &Wallets{
+	return &Manager{
 		Db:     db,
 		logger: opts.Logger,
 	}, err
 }
 
-func (ws *Wallets) Shutdown() {
-	if ws.Db != nil {
-		if err := ws.Db.Close(); err != nil {
-			ws.logger.Errorf("Unable to close wallets db: %s", err)
+func (m *Manager) Shutdown() {
+	if m.Db != nil {
+		if err := m.Db.Close(); err != nil {
+			m.logger.Errorf("Unable to close wallets db: %s", err)
 		}
 	}
 }
 
-func (ws *Wallets) AddWallet(auth string) (*Wallet, error) {
+func (m *Manager) AddWallet(auth string) (*Wallet, error) {
 	key, err := NewRandomKey()
 	if err != nil {
 		return nil, err
@@ -52,7 +65,7 @@ func (ws *Wallets) AddWallet(auth string) (*Wallet, error) {
 		return nil, err
 	}
 
-	if err := ws.Db.Update(func(txn *badger.Txn) error {
+	if err := m.Db.Update(func(txn *badger.Txn) error {
 		return txn.Set(key.Address.Bytes(), encryptedKey)
 	}); err != nil {
 		return nil, err
@@ -65,10 +78,10 @@ func (ws *Wallets) AddWallet(auth string) (*Wallet, error) {
 	return wallet, nil
 }
 
-func (ws *Wallets) GetAllAddresses() ([]common.Address, error) {
+func (m *Manager) GetAllAddresses() ([]common.Address, error) {
 	var addresses []common.Address
 
-	if err := ws.Db.View(func(txn *badger.Txn) error {
+	if err := m.Db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchSize = 10
 		it := txn.NewIterator(opts)
@@ -79,17 +92,17 @@ func (ws *Wallets) GetAllAddresses() ([]common.Address, error) {
 		}
 		return nil
 	}); err != nil {
-		ws.logger.Errorw("Unable to iterate db view", "err", err)
+		m.logger.Errorw("Unable to iterate db view", "err", err)
 		return nil, err
 	}
 
 	return addresses, nil
 }
 
-func (ws Wallets) GetWallet(address common.Address) (*Wallet, error) {
+func (m Manager) GetWallet(address common.Address) (*Wallet, error) {
 	var w *Wallet
 
-	if err := ws.Db.View(func(txn *badger.Txn) error {
+	if err := m.Db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(address.Bytes())
 		if err != nil {
 			return err
@@ -111,7 +124,7 @@ func (ws Wallets) GetWallet(address common.Address) (*Wallet, error) {
 	return w, nil
 }
 
-func DeserializeWallets(data []byte) (map[string]Wallet, error) {
+func DeserializeManager(data []byte) (map[string]Wallet, error) {
 	wallets := make(map[string]Wallet)
 
 	gob.Register(elliptic.P256())

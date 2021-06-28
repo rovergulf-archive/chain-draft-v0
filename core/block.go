@@ -5,51 +5,65 @@ import (
 	"crypto/sha256"
 	"encoding/gob"
 	"encoding/json"
-	"fmt"
+	"github.com/ethereum/go-ethereum/common"
 	"gopkg.in/yaml.v2"
-	"time"
 )
 
+type BlockHeader struct {
+}
+
+// Block represents
 type Block struct {
+	PrevHash     common.Hash    `json:"prev_hash" yaml:"prev_hash"`
+	Hash         common.Hash    `json:"hash" yaml:"hash"`
+	Number       uint64         `json:"number" yaml:"number"`
+	Nonce        uint32         `json:"nonce" yaml:"nonce"`
+	Difficulty   uint32         `json:"difficulty" yaml:"difficulty"`
 	Timestamp    int64          `json:"timestamp" yaml:"timestamp"`
-	Transactions []*Transaction `json:"transactions" yaml:"transactions"`
-	Hash         []byte         `json:"-" yaml:"-"`
-	PrevHash     []byte         `json:"prev_hash" yaml:"prev_hash"`
-	Nonce        int            `json:"nonce" yaml:"nonce"`
-	Height       int            `json:"height" yaml:"height"`
+	Miner        common.Address `json:"miner" yaml:"miner"`
+	Transactions []*SignedTx    `json:"transactions" yaml:"transactions"`
 }
 
 // NewBlock creates and returns Block
-func NewBlock(txs []*Transaction, prevBlockHash []byte, height int) *Block {
-	block := &Block{
-		Timestamp:    time.Now().Unix(),
+func NewBlock(prev common.Hash, number uint64, nonce uint32, time int64, miner common.Address, txs []*SignedTx) *Block {
+	return &Block{
+		PrevHash:     prev,
+		Number:       number,
+		Nonce:        nonce,
+		Timestamp:    time,
+		Miner:        miner,
 		Transactions: txs,
-		PrevHash:     prevBlockHash,
-		Hash:         []byte{},
-		Height:       height,
-		Nonce:        0,
+	}
+}
+
+// SetHash sets a hash of the block
+func (b *Block) SetHash() error {
+	enc, err := b.Encode()
+	if err != nil {
+		return err
 	}
 
-	pow := NewProofOfWork(block)
-	nonce, hash := pow.Run()
-
-	block.Hash = hash[:]
-	block.Nonce = nonce
-
-	return block
+	hash := sha256.Sum256(enc)
+	b.Hash = hash
+	return nil
 }
 
 // HashTransactions returns a hash of the transactions in the block
-func (b *Block) HashTransactions() []byte {
+func (b *Block) HashTransactions() ([]byte, error) {
 	var txHashes [][]byte
 	var txHash [32]byte
 
 	for _, tx := range b.Transactions {
-		txHashes = append(txHashes, tx.ID)
+		hash, err := tx.Hash()
+		if err != nil {
+			return nil, err
+		}
+
+		txHashes = append(txHashes, hash)
 	}
 	txHash = sha256.Sum256(bytes.Join(txHashes, []byte{}))
 
-	return txHash[:]
+	return txHash[:], nil
 }
 
 // Serialize serializes the block
@@ -63,8 +77,8 @@ func (b *Block) Serialize() ([]byte, error) {
 	return result.Bytes(), nil
 }
 
-// MarshalJSON serializes the block to json
-func (b *Block) MarshalJSON() ([]byte, error) {
+// Encode serializes the block to json
+func (b *Block) Encode() ([]byte, error) {
 	jsonRaw, err := json.Marshal(b)
 	if err != nil {
 		return nil, err
@@ -73,24 +87,14 @@ func (b *Block) MarshalJSON() ([]byte, error) {
 	return jsonRaw, nil
 }
 
-// MarshalYAML serializes the block to yaml
-func (b *Block) MarshalYAML() ([]byte, error) {
+// EncodeYaml serializes the block to yaml
+func (b *Block) EncodeYaml() ([]byte, error) {
 	jsonRaw, err := yaml.Marshal(b)
 	if err != nil {
 		return nil, err
 	}
 
 	return jsonRaw, nil
-}
-
-// GetHash returns string value of hash
-func (b *Block) GetHash() string {
-	return fmt.Sprintf("%x", b.Hash)
-}
-
-// GetPrevHash returns string value of previous block hash
-func (b *Block) GetPrevHash() string {
-	return fmt.Sprintf("%x", b.PrevHash)
 }
 
 // DeserializeBlock deserializes a block from gob encoding
@@ -105,11 +109,21 @@ func DeserializeBlock(d []byte) (*Block, error) {
 	return &block, nil
 }
 
-// UnmarshalJSONBlock deserializes a block from json
-func UnmarshalJSONBlock(jsonRaw []byte) (*Block, error) {
+// DecodeBlock deserializes a block from json
+func DecodeBlock(jsonRaw []byte) (*Block, error) {
 	var block Block
 
 	if err := json.Unmarshal(jsonRaw, &block); err != nil {
+		return nil, err
+	}
+
+	return &block, nil
+}
+
+// DecodeYAMLBlock deserializes a block from yaml
+func DecodeYAMLBlock(jsonRaw []byte) (*Block, error) {
+	var block Block
+	if err := yaml.Unmarshal(jsonRaw, &block); err != nil {
 		return nil, err
 	}
 

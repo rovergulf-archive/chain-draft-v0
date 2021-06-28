@@ -12,11 +12,13 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
+	"github.com/rovergulf/rbn/core"
 	"log"
 )
 
 type Wallet struct {
 	Address common.Address `json:"address" yaml:"address"`
+	Balance int            `json:"balance" yaml:"balance"`
 	Data    []byte         `json:"-" yaml:"-"`
 	Key     *keystore.Key  `json:"-" yaml:"-"`
 }
@@ -33,6 +35,23 @@ func (w *Wallet) Serialize() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+func (w *Wallet) SignTx(tx *core.Transaction) (*core.SignedTx, error) {
+	rawTx, err := tx.Serialize()
+	if err != nil {
+		return nil, err
+	}
+
+	sig, err := Sign(rawTx, w.Key.PrivateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return &core.SignedTx{
+		Transaction: *tx,
+		Sig:         sig,
+	}, nil
+}
+
 func DeserializeWallet(data []byte) (*Wallet, error) {
 	var w Wallet
 
@@ -43,6 +62,20 @@ func DeserializeWallet(data []byte) (*Wallet, error) {
 	}
 
 	return &w, nil
+}
+
+func SignTx(tx core.Transaction, privKey *ecdsa.PrivateKey) ([]byte, error) {
+	rawTx, err := tx.Serialize()
+	if err != nil {
+		return nil, err
+	}
+
+	sig, err := Sign(rawTx, privKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return sig, nil
 }
 
 func Sign(msg []byte, privKey *ecdsa.PrivateKey) (sig []byte, err error) {

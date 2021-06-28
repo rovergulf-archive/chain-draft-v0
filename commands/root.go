@@ -63,12 +63,10 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&dataDir, "data_dir", os.Getenv("DATA_DIR"), "Blockchain data directory")
 
 	// bind viper values
-	bindViperPersistentFlag(rootCmd, "jaeger_trace_url", "jaeger_trace")
 	bindViperPersistentFlag(rootCmd, "log_json", "log_json")
 	bindViperPersistentFlag(rootCmd, "log_level", "log_level")
 	bindViperPersistentFlag(rootCmd, "log_stacktrace", "log_stacktrace")
 	bindViperPersistentFlag(rootCmd, "data_dir", "data_dir")
-	bindViperPersistentFlag(rootCmd, "node_id", "node-id")
 
 	// show version
 	rootCmd.Flags().BoolP("version", "v", false, "Display version")
@@ -110,10 +108,22 @@ func setConfigDefaults() {
 	viper.SetDefault("metrics", true)
 	viper.SetDefault("jaeger_trace", os.Getenv("JAEGER_TRACE"))
 
+	viper.SetDefault("node_id", "")
+
+	// node
+	viper.SetDefault("root", "0x59fc6df01d2e84657faba24dc96e14871192bda4")
+	viper.SetDefault("miner", "0x0000000000000000000000000000000000000000")
+
+	// storage
+	viper.SetDefault("db", "")
 	viper.SetDefault("data_dir", "tmp")
 	viper.SetDefault("backup_dir", backupsDir)
-	viper.SetDefault("node_id", "")
-	viper.SetDefault("address", "")
+
+	viper.SetDefault("dgraph.enabled", false)
+	viper.SetDefault("dgraph.host", "127.0.0.1")
+	viper.SetDefault("dgraph.port", "9080")
+	viper.SetDefault("dgraph.user", "")
+	viper.SetDefault("dgraph.password", "")
 
 	// ssl configuration
 	viper.SetDefault("ssl.enabled", false)
@@ -124,16 +134,17 @@ func setConfigDefaults() {
 	viper.SetDefault("ssl.verify", false)
 
 	// bootstrap server
+	viper.SetDefault("network.id", 1)                  //
 	viper.SetDefault("network.host", "127.0.0.1:9420") // swarm.rovergulf.net:443
 
 	// http server
 	viper.SetDefault("node.addr", "127.0.0.1")
-	viper.SetDefault("node.port", 9000)
+	viper.SetDefault("node.port", 9420)
 	viper.SetDefault("node.sync_interval", 5)
 	viper.SetDefault("node.cache_dir", "")
 
 	viper.SetDefault("http.addr", "127.0.0.1")
-	viper.SetDefault("http.port", 8080)
+	viper.SetDefault("http.port", 9069)
 
 	// TBD
 	// Runtime configuration
