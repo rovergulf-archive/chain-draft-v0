@@ -34,22 +34,7 @@ func balancesListCmd() *cobra.Command {
 			}
 			defer bc.Shutdown()
 
-			balances := make(map[string]int)
-			//UTXOs, err := bc.FindUTXO()
-			//if err != nil {
-			//	return err
-			//}
-			//
-			//for i, out := range UTXOs {
-			//	//for i := range out.Outputs {
-			//	//	output := out.Outputs[i]
-			//	//}
-			//	balances[i] += out.Outputs[0].Value
-			//}
-
-			return writeOutput(cmd, map[string]interface{}{
-				"balances": balances,
-			})
+			return writeOutput(cmd, bc.Balances)
 		},
 	}
 
@@ -79,9 +64,14 @@ func balancesGetCmd() *cobra.Command {
 			}
 			defer bc.Shutdown()
 
-			//UTXOSet := core.UTXOSet{Blockchain: bc}
+			balanceSet := core.Balances{
+				Blockchain: *bc,
+			}
 
-			balance := 0
+			balance, err := balanceSet.GetBalance(common.HexToAddress(address))
+			if err != nil {
+				return err
+			}
 
 			//UTXOs, err := UTXOSet.FindUnspentTransactions(pubKeyHash)
 			//if err != nil {

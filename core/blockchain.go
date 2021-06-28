@@ -6,7 +6,6 @@ import (
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/opentracing/opentracing-go"
-	"github.com/rovergulf/rbn/core/types"
 	"github.com/rovergulf/rbn/database/badgerdb"
 	"github.com/rovergulf/rbn/pkg/config"
 	"github.com/spf13/viper"
@@ -32,10 +31,12 @@ func dbExists(filePath string) bool {
 }
 
 type Blockchain struct {
-	Balances    map[common.Address]types.Balance
+	Balances    map[common.Address]Balance
 	LastHash    common.Hash
-	ChainLength big.Int
+	ChainLength *big.Int
 	Db          *badger.DB `json:"-" yaml:"-"`
+
+	genesis *Genesis
 
 	logger *zap.SugaredLogger
 	tracer opentracing.Tracer
@@ -44,8 +45,32 @@ type Blockchain struct {
 
 // InitBlockchain creates a new blockchain DB
 func InitBlockchain(opts config.Options) (*Blockchain, error) {
+	if dbExists(opts.DbFilePath) {
+		return nil, fmt.Errorf("genesis already initalized")
+	}
 
-	var tip common.Hash
+	gen, err := loadGenesisFromFile(viper.GetString("genesis"))
+	if err != nil {
+		opts.Logger.Errorf("Unable to load genesis file: %s", err)
+		return nil, err
+	}
+
+	genSerialized, err := gen.MarshalJSON()
+	if err != nil {
+		opts.Logger.Errorf("Unable to marshal genesis: %s", err)
+		return nil, err
+	}
+
+	genesis, err := NewGenesisBlock(gen)
+	if err != nil {
+		return nil, err
+	}
+
+	genBlock, err := genesis.Serialize()
+	if err != nil {
+		opts.Logger.Errorf("Unable to serialize genesis block: %s", err)
+		return nil, err
+	}
 
 	opts.Badger = badger.DefaultOptions(opts.DbFilePath)
 	db, err := badgerdb.OpenDB(opts.DbFilePath, opts.Badger)
@@ -54,40 +79,25 @@ func InitBlockchain(opts config.Options) (*Blockchain, error) {
 		return nil, err
 	}
 
-	gen, err := loadGenesisFromFile(viper.GetString("genesis"))
-	if err != nil {
-		if err == os.ErrNotExist {
-			err = nil
-		} else {
-			return nil, err
-		}
-	}
-
 	bc := Blockchain{
-		LastHash: tip,
-		Balances: make(map[common.Address]types.Balance),
-		Db:       db,
-		logger:   opts.Logger,
-		tracer:   opts.Tracer,
+		LastHash:    genesis.Hash,
+		Balances:    make(map[common.Address]Balance),
+		ChainLength: big.NewInt(0),
+		Db:          db,
+		genesis:     gen,
+		logger:      opts.Logger,
+		tracer:      opts.Tracer,
 	}
 
-	genSerialized, err := gen.MarshalJSON()
-	if err != nil {
-		return nil, err
+	for addr := range gen.Alloc {
+		bc.Balances[addr] = Balance{
+			Address: addr,
+			Balance: big.NewInt(gen.Alloc[addr].Balance),
+			Nonce:   gen.Alloc[addr].Nonce,
+		}
 	}
 
 	if err := db.Update(func(txn *badger.Txn) error {
-		genesis, err := NewGenesisBlock(gen)
-		if err != nil {
-			return err
-		}
-
-		genBlock, err := genesis.Serialize()
-		if err != nil {
-			opts.Logger.Errorf("Unable to serialize genesis block: %s", err)
-			return err
-		}
-
 		if err := txn.Set([]byte("g"), genSerialized); err != nil {
 			opts.Logger.Errorf("Unable to save genesis value: %s", err)
 			return err
@@ -108,6 +118,20 @@ func InitBlockchain(opts config.Options) (*Blockchain, error) {
 			return err
 		}
 
+		for addr := range bc.Balances {
+			bal := bc.Balances[addr]
+			balanceEncoded, err := bal.Serialize()
+			if err != nil {
+				return err
+			}
+			fmt.Println("save balance for ", addr.Hex())
+			balanceKey := append(balancesPrefix, addr.Bytes()...)
+			if err := txn.Set(balanceKey, balanceEncoded); err != nil {
+				opts.Logger.Errorf("Unable to save balance: %s", err)
+				return err
+			}
+		}
+
 		bc.LastHash = genesis.Hash
 
 		return nil
@@ -121,8 +145,18 @@ func InitBlockchain(opts config.Options) (*Blockchain, error) {
 
 // ContinueBlockchain continues from existing database Blockchain
 func ContinueBlockchain(opts config.Options) (*Blockchain, error) {
+	if !dbExists(opts.DbFilePath) {
+		return nil, fmt.Errorf("chain db does not exists")
+	}
 
-	var b Blockchain
+	b := Blockchain{
+		Balances:    make(map[common.Address]Balance),
+		genesis:     new(Genesis),
+		ChainLength: big.NewInt(0),
+		logger:      opts.Logger,
+		tracer:      opts.Tracer,
+		closer:      opts.Closer,
+	}
 
 	opts.Badger = badger.DefaultOptions(opts.DbFilePath)
 	db, err := badgerdb.OpenDB(opts.DbFilePath, opts.Badger)
@@ -155,13 +189,15 @@ func ContinueBlockchain(opts config.Options) (*Blockchain, error) {
 	}
 
 	b.Db = db
-	b.logger = opts.Logger
-	b.tracer = opts.Tracer
 	return &b, nil
 }
 
 // AddBlock adds a block with the provided transactions
 func (bc *Blockchain) AddBlock(block *Block) error {
+	if len(block.Hash.Bytes()) == 0 {
+		return fmt.Errorf("bad block hash")
+	}
+
 	return bc.Db.Update(func(txn *badger.Txn) error {
 		if _, err := txn.Get(block.Hash.Bytes()); err == nil {
 			return nil
@@ -202,8 +238,8 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 					bc.LastHash = block.Hash
 				}
 
-				bc.logger.Infow("Saved block", "last_hash", lastBlock.Hash,
-					"hash", block.Hash, "number", block.Number)
+				bc.logger.Infow("Saved block", "prev", lastBlock.Hash,
+					"hash", block.Hash, "number", block.Number, "txs", len(block.Transactions))
 
 				return nil
 			})
@@ -211,53 +247,53 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 	})
 }
 
-// MineBlock mines a new block with the provided transactions
-func (bc *Blockchain) MineBlock(transactions []*SignedTx) (*Block, error) {
-	var lastHash []byte
-	var lastHeight uint64
-
-	if err := bc.Db.View(func(txn *badger.Txn) error {
-		lh, err := txn.Get([]byte("lh"))
-		if err != nil {
-			bc.logger.Errorf("Unable to get last hash value: %s", err)
-			return err
-		}
-
-		return lh.Value(func(val []byte) error {
-			lastHash = val
-			lb, err := txn.Get(val)
-			if err != nil {
-				return err
-			}
-
-			return lb.Value(func(val []byte) error {
-				lastBlock, err := DeserializeBlock(val)
-				if err != nil {
-					return err
-				} else {
-					lastHeight = lastBlock.Number
-				}
-				return nil
-			})
-		})
-	}); err != nil {
-		bc.logger.Errorf("Unable to get last hash: %s", err)
-		return nil, err
-	}
-
-	newBlock := &Block{}
-	//newBlock, err := NewBlock(lastHash, lastHeight+1, 0, now, nil, transactions)
-	//if err != nil {
-	//	return nil, err
-	//}
-
-	if err := bc.AddBlock(newBlock); err != nil {
-		bc.logger.Errorf("Unable to start transaction: %s", err)
-		return nil, err
-	}
-
-	return newBlock, nil
-}
+//// MineBlock mines a new block with the provided transactions
+//func (bc *Blockchain) MineBlock(transactions []*SignedTx) (*Block, error) {
+//	var lastHash []byte
+//	var lastHeight uint64
+//
+//	if err := bc.Db.View(func(txn *badger.Txn) error {
+//		lh, err := txn.Get([]byte("lh"))
+//		if err != nil {
+//			bc.logger.Errorf("Unable to get last hash value: %s", err)
+//			return err
+//		}
+//
+//		return lh.Value(func(val []byte) error {
+//			lastHash = val
+//			lb, err := txn.Get(val)
+//			if err != nil {
+//				return err
+//			}
+//
+//			return lb.Value(func(val []byte) error {
+//				lastBlock, err := DeserializeBlock(val)
+//				if err != nil {
+//					return err
+//				} else {
+//					lastHeight = lastBlock.Number
+//				}
+//				return nil
+//			})
+//		})
+//	}); err != nil {
+//		bc.logger.Errorf("Unable to get last hash: %s", err)
+//		return nil, err
+//	}
+//
+//	newBlock := &Block{}
+//	//newBlock, err := NewBlock(lastHash, lastHeight+1, 0, now, nil, transactions)
+//	//if err != nil {
+//	//	return nil, err
+//	//}
+//
+//	if err := bc.AddBlock(newBlock); err != nil {
+//		bc.logger.Errorf("Unable to start transaction: %s", err)
+//		return nil, err
+//	}
+//
+//	return newBlock, nil
+//}
 
 func (bc *Blockchain) GetBestHeight() (uint64, error) {
 	var lastBlockHeight uint64

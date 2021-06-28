@@ -164,13 +164,7 @@ func txSendCmd() *cobra.Command {
 					return err
 				}
 
-				block, err := bc.MineBlock(txs)
-				if err != nil {
-					return err
-				}
-
-				fmt.Println(b, block)
-				return nil
+				return bc.AddBlock(b)
 			} else {
 				return fmt.Errorf("not implemented")
 				//return node.SendTx(viper.GetString("node_id"), tx)
