@@ -79,7 +79,7 @@ func (h *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 type StatusRes struct {
 	LastHash   string              `json:"block_hash,omitempty" yaml:"last_hash,omitempty"`
-	Number     int                 `json:"block_number,omitempty" yaml:"number,omitempty"`
+	Number     uint64              `json:"block_number,omitempty" yaml:"number,omitempty"`
 	KnownPeers map[string]PeerNode `json:"peers_known,omitempty" yaml:"known_peers,omitempty"`
 	PendingTXs []*core.Transaction `json:"pending_txs,omitempty" yaml:"pending_t_xs,omitempty"`
 }

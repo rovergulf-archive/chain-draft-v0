@@ -2,7 +2,7 @@ package commands
 
 import (
 	"fmt"
-	"github.com/rovergulf/rbn/accounts"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/rovergulf/rbn/core"
 	"github.com/spf13/cobra"
 )
@@ -34,18 +34,18 @@ func balancesListCmd() *cobra.Command {
 			}
 			defer bc.Shutdown()
 
-			balances := make(map[int]int)
-			UTXOs, err := bc.FindUTXO()
-			if err != nil {
-				return err
-			}
-
-			for _, out := range UTXOs {
-				for i := range out.Outputs {
-					output := out.Outputs[i]
-					balances[i] += output.Value
-				}
-			}
+			balances := make(map[string]int)
+			//UTXOs, err := bc.FindUTXO()
+			//if err != nil {
+			//	return err
+			//}
+			//
+			//for i, out := range UTXOs {
+			//	//for i := range out.Outputs {
+			//	//	output := out.Outputs[i]
+			//	//}
+			//	balances[i] += out.Outputs[0].Value
+			//}
 
 			return writeOutput(cmd, map[string]interface{}{
 				"balances": balances,
@@ -67,7 +67,7 @@ func balancesGetCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			address, _ := cmd.Flags().GetString("address")
 			if len(address) > 0 {
-				if !accounts.ValidateAddress(address) {
+				if !common.IsHexAddress(address) {
 					return fmt.Errorf("invalid address")
 				}
 			}
@@ -79,24 +79,18 @@ func balancesGetCmd() *cobra.Command {
 			}
 			defer bc.Shutdown()
 
-			pubKeyHash, err := accounts.Base58Decode([]byte(address))
-			if err != nil {
-				logger.Errorf("Unable to decode wallet address: %s", err)
-				return err
-			}
-
-			UTXOSet := core.UTXOSet{Blockchain: bc}
+			//UTXOSet := core.UTXOSet{Blockchain: bc}
 
 			balance := 0
-			pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-4]
-			UTXOs, err := UTXOSet.FindUnspentTransactions(pubKeyHash)
-			if err != nil {
-				return err
-			}
 
-			for _, out := range UTXOs {
-				balance += out.Value
-			}
+			//UTXOs, err := UTXOSet.FindUnspentTransactions(pubKeyHash)
+			//if err != nil {
+			//	return err
+			//}
+			//
+			//for _, out := range UTXOs {
+			//	balance += out.Value
+			//}
 
 			return writeOutput(cmd, map[string]interface{}{
 				"address": address,

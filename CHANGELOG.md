@@ -4,41 +4,73 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
+## 28 Jun 2021
+
+### Added
+- Genesis initialization from file
+
+### Changed
+- Updated transaction signing using etherium SDK
+- Use Ether-like wallet balance design instead Bitcoin UTXO
+
+### Fixed
+
+### Removed
+
+
+## 3 Jun 2021
+
+### Changed
+- `Wallets` now are `Manager`
+- `repo` package moved to `database/badgerdb` to prepare multiple database backend interface
+  - [Dgraph Go client](https://github.com/dgraph-io/dgo)
+
+
+## 1 Jun 2021
+
+### Added
+- Prepare genesis from file
+- `tx get --id $TRANSACTION_ID` command
+
+
 ## 31 May 2021
 
 ### Added
-- prepared node multiple network interfaces
+- Prepared node multiple network interfaces
 - etherium-go SDK wallet `common.Address` support
 
+### Changed
+- `accounts` package moved to `wallets`
+
 ### Fixed
-- send command public key length
-- get wallet balance
-- list balances command output
+- Send command public key length
+- Get wallet balance
+- List balances command output
 
 
 ## 25 May 2021
 
 ### Added
 - CLI backup and balances commands templates
-- prepared Node and PeerNode structs to handle network
+- Prepared Node and PeerNode structs to handle network
 
 ### Changed
-- config package containing common options
+- `config` package containing common options
 
 
 ## 24 May 2021
 
 ### Changed
 - Updated CLI usage
-- badger db setup moved to separate package
+- Badger DB setup moved to separate package
 
 
 ## 23 May 2021
 
 ### Added
-- bitcoin base58 encoded wallet address support
+- Bitcoin base58 encoded wallet address support
 - TODO: change to [etherium based address](https://pkg.go.dev/github.com/ethereum/go-ethereum/crypto/secp256k1) using `secp256k1`
-- node package to handle blockchain peers
+- `node` package to handle blockchain peers
 
 ### Fixed
 - blockchain init/continue handlers
@@ -48,7 +80,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - UTXO set
-- accounts package to handle wallet addresses
+- `accounts` package to handle wallet addresses
 - base58 encoding (temporarily to supply bitcoin like address)
 
 ### Changed

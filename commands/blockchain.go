@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"fmt"
 	"github.com/rovergulf/rbn/core"
 	"github.com/spf13/cobra"
 )
@@ -49,6 +48,7 @@ func initBlockchainCmd() *cobra.Command {
 
 	addAddressFlag(initBlockchainCmd)
 	addNodeIdFlag(initBlockchainCmd)
+	initBlockchainCmd.Flags().StringP("genesis", "g", "", "Genesis file path")
 
 	return initBlockchainCmd
 }
@@ -81,18 +81,15 @@ func blockchainListCmd() *cobra.Command {
 				}
 				limit++
 
-				pow := core.NewProofOfWork(block)
-
 				if err := writeOutput(cmd, map[string]interface{}{
-					"hash":      block.GetHash(),
-					"prev_hash": block.GetPrevHash(),
-					"pow":       fmt.Sprintf("%v", pow.Validate()),
+					"hash":      block.Hash,
+					"prev_hash": block.PrevHash,
 					"txs":       block.Transactions,
 				}); err != nil {
 					logger.Errorf("Unable to write block response: %s", err)
 				}
 
-				if len(block.PrevHash) == 0 {
+				if len(block.PrevHash.Bytes()) == 0 {
 					break
 				}
 			}
@@ -127,9 +124,7 @@ func blockchainLastBlockCmd() *cobra.Command {
 				return err
 			}
 
-			return writeOutput(cmd, map[string]interface{}{
-				"hash": block.GetHash(),
-			})
+			return writeOutput(cmd, block)
 		},
 		TraverseChildren: true,
 	}

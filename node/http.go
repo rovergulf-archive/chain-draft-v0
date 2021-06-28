@@ -7,8 +7,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prom2json"
-	"github.com/rovergulf/rbn/accounts"
-	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/pkg/response"
 	"github.com/rovergulf/rbn/pkg/version"
 	"net/http"
@@ -139,8 +137,8 @@ func (n *Node) NodeStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	n.httpResponse(w, StatusRes{
-		LastHash:   lb.GetHash(),
-		Number:     lb.Height,
+		LastHash:   lb.Hash.Hex(),
+		Number:     lb.Number,
 		KnownPeers: n.knownPeers,
 		PendingTXs: nil,
 	})
@@ -169,26 +167,19 @@ func (n *Node) GetBalance(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	addr := vars["addr"]
 
-	pubKeyHash, err := accounts.Base58Decode([]byte(addr))
-	if err != nil {
-		n.logger.Errorf("Unable to decode wallet address: %s", err)
-		n.httpResponse(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	UTXOSet := core.UTXOSet{Blockchain: n.bc}
+	//UTXOSet := core.UTXOSet{Blockchain: n.bc}
 
 	balance := 0
-	pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-4]
-	UTXOs, err := UTXOSet.FindUnspentTransactions(pubKeyHash)
-	if err != nil {
-		n.httpResponse(w, err.Error(), http.StatusBadRequest)
-		return
-	}
 
-	for _, out := range UTXOs {
-		balance += out.Value
-	}
+	//UTXOs, err := UTXOSet.FindUnspentTransactions(pubKeyHash)
+	//if err != nil {
+	//	n.httpResponse(w, err.Error(), http.StatusBadRequest)
+	//	return
+	//}
+	//
+	//for _, out := range UTXOs {
+	//	balance += out.Value
+	//}
 
 	n.httpResponse(w, map[string]interface{}{
 		"address": addr,

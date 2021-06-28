@@ -2,8 +2,9 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
-	"go.uber.org/zap"
+	"fmt"
 	"log"
 )
 
@@ -18,6 +19,12 @@ func IntToHex(num int64) []byte {
 	return buff.Bytes()
 }
 
-func (bc *Blockchain) GetLogger() *zap.SugaredLogger {
-	return bc.logger
+func onCtxDone(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("mining cancelled. %s", ctx.Err())
+	default:
+	}
+
+	return nil
 }

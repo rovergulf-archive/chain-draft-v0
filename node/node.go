@@ -3,10 +3,12 @@ package node
 import (
 	"context"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/mux"
 	"github.com/opentracing/opentracing-go"
 	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/pkg/config"
+	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/viper"
 	"github.com/uber/jaeger-client-go"
 	jconf "github.com/uber/jaeger-client-go/config"
@@ -27,6 +29,9 @@ const (
 	endpointStatus  = "/node/status"
 	endpointSync    = "/node/sync"
 	endpointAddPeer = "/node/peer"
+
+	RootAddress  = "0x59fc6df01d2e84657faba24dc96e14871192bda4"
+	DefaultMiner = "0x0000000000000000000000000000000000000000"
 )
 
 // Node represents blockchain network peer node
@@ -35,6 +40,7 @@ type Node struct {
 
 	config      config.Options
 	bc          *core.Blockchain
+	wm          *wallets.Manager
 	httpHandler httpServer
 	rpcListener net.Listener
 
@@ -42,8 +48,9 @@ type Node struct {
 
 	knownPeers knownPeers
 
-	newSyncedBlocks chan *core.Block
-	newPendingTXs   chan *core.Transaction
+	proposedBlocks chan *core.Block
+	proposedTXs    chan *core.Transaction
+	errCh          chan error
 
 	//Lock *sync.RWMutex
 
@@ -62,7 +69,7 @@ func New(opts config.Options) (*Node, error) {
 		Ip:        nodeAddr,
 		Port:      nodePort,
 		Root:      peerNodeAddr == DefaultNetworkAddr,
-		Account:   opts.Address,
+		Account:   common.HexToAddress(opts.Address),
 		connected: false,
 	}
 
@@ -72,12 +79,10 @@ func New(opts config.Options) (*Node, error) {
 			router: mux.NewRouter(),
 			logger: opts.Logger,
 		},
-		config: opts,
-		bc:     nil,
-		logger: opts.Logger,
-		knownPeers: map[string]PeerNode{
-			DefaultNetworkAddr: NewPeerNode(DefaultNodeIP, DefaultNodePort, true, "", true),
-		},
+		config:     opts,
+		bc:         nil,
+		logger:     opts.Logger,
+		knownPeers: make(map[string]PeerNode),
 		//Lock:       new(sync.RWMutex),
 	}
 
@@ -97,10 +102,7 @@ func New(opts config.Options) (*Node, error) {
 }
 
 func (n *Node) Run() error {
-	nodeAddress := fmt.Sprintf("%s:%s",
-		viper.GetString("node.addr"),
-		viper.GetString("node.port"),
-	)
+	nodeAddress := fmt.Sprintf("%s:%d", n.metadata.Ip, n.metadata.Port)
 
 	httpApiAddress := fmt.Sprintf("%s:%s",
 		viper.GetString("http.addr"),
@@ -117,12 +119,9 @@ func (n *Node) Run() error {
 	defer chain.Shutdown()
 	n.bc = chain
 
-	if !n.metadata.Root {
-		//if err := SendVersion(KnownNodes[0], chain); err != nil {
-		//	return err
-		//}
-	} else {
-
+	n.wm, err = wallets.NewManager(n.config)
+	if err != nil {
+		return err
 	}
 
 	ln, err := net.Listen(rpcNetProtocol, nodeAddress)
@@ -130,6 +129,10 @@ func (n *Node) Run() error {
 		return err
 	} else {
 		n.rpcListener = ln
+	}
+
+	if !n.metadata.Root {
+	} else {
 	}
 
 	go func() {
@@ -168,7 +171,7 @@ func (n *Node) Shutdown() {
 }
 
 func (n *Node) IsKnownPeer(peer PeerNode) bool {
-	_, ok := n.knownPeers[peer.GetId()]
+	_, ok := n.knownPeers[peer.Account.Hex()]
 	return ok
 }
 

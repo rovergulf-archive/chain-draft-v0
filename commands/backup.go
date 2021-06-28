@@ -9,7 +9,6 @@ const (
 )
 
 func init() {
-	// new
 	rootCmd.AddCommand(backupCmd)
 	backupCmd.AddCommand(backupNewCmd())
 	backupCmd.AddCommand(backupListCmd())

@@ -1,0 +1,30 @@
+{
+  "genesis_time": "2021-06-01T00:00:00.000000000Z",
+  "chain_id": "Rovergulf Blockchain Network ledger",
+  "symbol": "TBB",
+  "network": {
+    "id": 9420,
+    "host": "127.0.0.1:9420"
+  },
+  "coinbase": "0x59fc6df01d2e84657faba24dc96e14871192bda4",
+  "difficulty": "0x400",
+  "gasLimit": "0x2100000",
+  "alloc": {
+    "0xC777Cc593a3C45fb6038De239BADE30eFB6821a3": {
+      "balance": "0x1337000000000000000000"
+    },
+    "0x19c289D74b4ef97af0B30206324CfC954dE17b0f": {
+      "balance": "0x1488000000000000000000"
+    },
+    "0x412F094e3D1565b9fb97203f677138b5dA740591": {
+      "balance": "0x1230000000000000000000"
+    }
+  },
+  "chain": {
+    "id": 9420,
+    "homestead_block": 0,
+    "eip155_block": 0,
+    "eip158_block": 0
+  },
+  "extra_data": ""
+}
