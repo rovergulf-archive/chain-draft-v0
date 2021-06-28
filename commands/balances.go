@@ -65,7 +65,7 @@ func balancesGetCmd() *cobra.Command {
 			defer bc.Shutdown()
 
 			balanceSet := core.Balances{
-				Blockchain: *bc,
+				Blockchain: bc,
 			}
 
 			balance, err := balanceSet.GetBalance(common.HexToAddress(address))

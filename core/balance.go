@@ -3,7 +3,6 @@ package core
 import (
 	"bytes"
 	"encoding/gob"
-	"encoding/json"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"math/big"
@@ -41,34 +40,55 @@ func (b *Balance) Deserialize(data []byte) error {
 	return nil
 }
 
-func (b *Balance) MarshalJSON() ([]byte, error) {
-	return json.Marshal(*b)
-}
-
-func (b *Balance) UnmarshalJSON(data []byte) error {
-	return json.Unmarshal(data, b)
-}
-
 type Balances struct {
-	Blockchain
+	*Blockchain
 }
 
-func (bc *Balances) GetBalance(addr common.Address) (*Balance, error) {
-	var b Balance
+func (b *Balances) GetBalance(addr common.Address) (*Balance, error) {
+	var balance Balance
 
 	key := append(balancesPrefix, addr.Bytes()...)
-	if err := bc.Db.View(func(txn *badger.Txn) error {
+	if err := b.Db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(key)
 		if err != nil {
 			return err
 		}
 
 		return item.Value(func(val []byte) error {
-			return b.Deserialize(val)
+			return balance.Deserialize(val)
 		})
 	}); err != nil {
 		return nil, err
 	}
 
-	return &b, nil
+	return &balance, nil
+}
+
+func (b *Balances) ListBalances() ([]*Balance, error) {
+	var balances []*Balance
+
+	if err := b.Db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = balancesPrefix
+		it := txn.NewIterator(opts)
+		defer it.Close()
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			var balance Balance
+
+			if err := item.Value(func(val []byte) error {
+				return balance.Deserialize(val)
+			}); err != nil {
+				return err
+			}
+
+			balances = append(balances, &balance)
+		}
+		return nil
+	}); err != nil {
+		b.logger.Errorw("Unable to iterate db view", "err", err)
+		return nil, err
+	}
+
+	return balances, nil
 }

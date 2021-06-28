@@ -8,6 +8,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/pkg/config"
+	"github.com/rovergulf/rbn/pkg/exit"
 	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/viper"
 	"github.com/uber/jaeger-client-go"
@@ -17,6 +18,8 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
+	"os"
+	"time"
 )
 
 const (
@@ -47,6 +50,8 @@ type Node struct {
 	isMining bool
 
 	knownPeers knownPeers
+
+	pendingTXs map[string]*core.SignedTx
 
 	proposedBlocks chan *core.Block
 	proposedTXs    chan *core.Transaction
@@ -102,6 +107,9 @@ func New(opts config.Options) (*Node, error) {
 }
 
 func (n *Node) Run() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	nodeAddress := fmt.Sprintf("%s:%d", n.metadata.Ip, n.metadata.Port)
 
 	httpApiAddress := fmt.Sprintf("%s:%s",
@@ -111,6 +119,14 @@ func (n *Node) Run() error {
 
 	n.logger.Infow("Starting node...",
 		"addr", nodeAddress, "is_root", n.metadata.Root)
+
+	exit.ListenExit(func(signal os.Signal) {
+		n.logger.Warnf("Signal [%s] received. Graceful shutdown", signal)
+		time.AfterFunc(15*time.Second, func() {
+			n.logger.Fatal("Failed to gracefully shutdown after 15 sec. Force exit")
+		})
+		n.Shutdown()
+	})
 
 	chain, err := core.ContinueBlockchain(n.config)
 	if err != nil {
@@ -150,12 +166,20 @@ func (n *Node) Run() error {
 		}
 	}()
 
+	go n.mine(ctx)
+
 	n.logger.Infow("Listening HTTP", "addr", httpApiAddress)
 	return n.serveHttp()
 }
 
 func (n *Node) Shutdown() {
-	n.bc.Shutdown()
+	if n.bc != nil {
+		n.bc.Shutdown()
+	}
+
+	if n.wm != nil {
+		n.wm.Shutdown()
+	}
 
 	if n.rpcListener != nil {
 		if err := n.rpcListener.Close(); err != nil {
@@ -197,7 +221,7 @@ func (n *Node) HandleConnection(conn net.Conn) error {
 	n.logger.Debugf("Received [%s] command", command)
 
 	switch command {
-	case "":
+	case "sync":
 		return nil
 		//return HandleAddr(req)
 	case "block":
@@ -300,4 +324,93 @@ func (n *Node) collectNetInterfaces() error {
 	}
 
 	return nil
+}
+
+func (n *Node) mine(ctx context.Context) error {
+	var miningCtx context.Context
+	var stopCurrentMining context.CancelFunc
+
+	ticker := time.NewTicker(time.Second * miningIntervalSeconds)
+
+	for {
+		select {
+		case <-ticker.C:
+			go func() {
+				if len(n.proposedTXs) > 0 && !n.isMining {
+					n.isMining = true
+
+					miningCtx, stopCurrentMining = context.WithCancel(ctx)
+					err := n.minePendingTXs(miningCtx)
+					if err != nil {
+						fmt.Printf("ERROR: %s\n", err)
+					}
+
+					n.isMining = false
+				}
+			}()
+
+		case block, _ := <-n.proposedBlocks:
+			if n.isMining {
+				if err := block.SetHash(); err != nil {
+
+				}
+				fmt.Printf("\nPeer mined next Block '%s' faster :(\n", block.Hash.Hex())
+
+				n.removeMinedPendingTXs(block)
+				stopCurrentMining()
+			}
+
+		case <-ctx.Done():
+			ticker.Stop()
+			return nil
+		}
+	}
+}
+
+func (n *Node) minePendingTXs(ctx context.Context) error {
+	if len(n.pendingTXs) == 0 {
+		return fmt.Errorf("no transactions available")
+	}
+
+	var txs []*core.SignedTx
+
+	for i := range n.pendingTXs {
+		txs = append(txs, n.pendingTXs[i])
+	}
+
+	blockToMine := NewPendingBlock(
+		n.bc.LastHash,
+		n.bc.ChainLength.Uint64(),
+		n.metadata.Account,
+		txs,
+	)
+
+	minedBlock, err := Mine(ctx, blockToMine)
+	if err != nil {
+		return err
+	}
+
+	n.removeMinedPendingTXs(minedBlock)
+
+	if err := n.bc.AddBlock(minedBlock); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (n *Node) removeMinedPendingTXs(block *core.Block) {
+	if len(block.Transactions) > 0 && len(n.pendingTXs) > 0 {
+		fmt.Println("Updating in-memory Pending TXs Pool:")
+	}
+
+	for _, tx := range block.Transactions {
+		txHash, _ := tx.Hash()
+		txh := common.BytesToHash(txHash)
+		if _, exists := n.pendingTXs[txh.Hex()]; exists {
+			fmt.Printf("\t-archiving mined TX: %s\n", txh.Hex())
+
+			delete(n.pendingTXs, txh.Hex())
+		}
+	}
 }

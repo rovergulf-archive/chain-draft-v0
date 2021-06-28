@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+const miningIntervalSeconds = 10
+
 type PendingBlock struct {
 	parent common.Hash
 	number uint64
