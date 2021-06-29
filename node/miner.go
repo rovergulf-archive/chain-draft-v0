@@ -34,7 +34,7 @@ func Mine(ctx context.Context, pb PendingBlock) (*core.Block, error) {
 	attempt := 0
 	block := new(core.Block)
 	var hash common.Hash
-	var nonce uint32
+	var nonce uint64
 
 	for !IsBlockHashValid(hash) {
 		select {
@@ -71,10 +71,10 @@ func Mine(ctx context.Context, pb PendingBlock) (*core.Block, error) {
 	return block, nil
 }
 
-func generateNonce() uint32 {
+func generateNonce() uint64 {
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	return rand.Uint32()
+	return rand.Uint64()
 }
 
 func IsBlockHashValid(hash common.Hash) bool {

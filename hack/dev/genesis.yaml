@@ -1,0 +1,18 @@
+genesis_time: "2021-06-01T00:00:00.000000000Z"
+chain_id: "Rovergulf Blockchain Network ledger"
+symbol: "TBB"
+difficulty: 400
+gasLimit: 2100000
+coinbase: "0x59fc6df01d2e84657faba24dc96e14871192bda4"
+alloc:
+  0xC777Cc593a3C45fb6038De239BADE30eFB6821a3:
+    balance: 1000
+  0x19c289D74b4ef97af0B30206324CfC954dE17b0f:
+    balance: 1000
+  0x412F094e3D1565b9fb97203f677138b5dA740591:
+    balance: 1000
+config:
+  chainId: 15
+  homesteadBlock: 0
+  eip155Block: 0
+  eip158Block: 0

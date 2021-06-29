@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"fmt"
+	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/mux"
 	"github.com/opentracing/opentracing-go"
@@ -23,6 +24,8 @@ import (
 )
 
 const (
+	DbFileName = "node.db"
+
 	DefaultNodeIP      = "127.0.0.1"
 	DefaultNodePort    = 9420
 	HttpSSLPort        = 443
@@ -41,9 +44,12 @@ const (
 type Node struct {
 	metadata PeerNode
 
-	config      config.Options
-	bc          *core.Blockchain
-	wm          *wallets.Manager
+	config config.Options
+
+	bc *core.Blockchain
+	wm *wallets.Manager
+	db *badger.DB
+
 	httpHandler httpServer
 	rpcListener net.Listener
 
@@ -54,7 +60,7 @@ type Node struct {
 	pendingTXs map[string]*core.SignedTx
 
 	proposedBlocks chan *core.Block
-	proposedTXs    chan *core.Transaction
+	proposedTXs    chan *core.SignedTx
 	errCh          chan error
 
 	//Lock *sync.RWMutex
@@ -84,10 +90,13 @@ func New(opts config.Options) (*Node, error) {
 			router: mux.NewRouter(),
 			logger: opts.Logger,
 		},
-		config:     opts,
-		bc:         nil,
-		logger:     opts.Logger,
-		knownPeers: make(map[string]PeerNode),
+		config:         opts,
+		bc:             nil,
+		logger:         opts.Logger,
+		knownPeers:     make(map[string]PeerNode),
+		pendingTXs:     make(map[string]*core.SignedTx),
+		proposedTXs:    make(chan *core.SignedTx),
+		proposedBlocks: make(chan *core.Block),
 		//Lock:       new(sync.RWMutex),
 	}
 
@@ -140,30 +149,15 @@ func (n *Node) Run() error {
 		return err
 	}
 
-	ln, err := net.Listen(rpcNetProtocol, nodeAddress)
-	if err != nil {
-		return err
-	} else {
-		n.rpcListener = ln
-	}
+	n.logger.Debugf("Miner: %s", n.metadata.Account.Hex())
 
 	if !n.metadata.Root {
 	} else {
 	}
 
 	go func() {
-		n.logger.Debugw("Listening TCP", "addr", nodeAddress)
-		for {
-			conn, err := n.rpcListener.Accept()
-			if err != nil {
-				n.logger.Errorf("Unable to accept connection from %s", conn.LocalAddr())
-			}
-			go func() {
-				if err := n.HandleConnection(conn); err != nil {
-					n.logger.Errorf("Unable to handle connection from %s", conn.LocalAddr())
-				}
-			}()
-		}
+		n.logger.Debugw("Listening gRPC", "addr", nodeAddress)
+
 	}()
 
 	go n.mine(ctx)
@@ -192,6 +186,8 @@ func (n *Node) Shutdown() {
 			n.logger.Errorf("Unable to close tracing writer: %s", err)
 		}
 	}
+
+	os.Exit(0)
 }
 
 func (n *Node) IsKnownPeer(peer PeerNode) bool {
@@ -336,13 +332,15 @@ func (n *Node) mine(ctx context.Context) error {
 		select {
 		case <-ticker.C:
 			go func() {
+				n.logger.Debugw("Check for available transactions",
+					"txs", len(n.proposedTXs), "is_mining", n.isMining)
 				if len(n.proposedTXs) > 0 && !n.isMining {
 					n.isMining = true
 
 					miningCtx, stopCurrentMining = context.WithCancel(ctx)
 					err := n.minePendingTXs(miningCtx)
 					if err != nil {
-						fmt.Printf("ERROR: %s\n", err)
+						n.logger.Errorf("Failed to mine pending txs: %s", err)
 					}
 
 					n.isMining = false
@@ -350,18 +348,16 @@ func (n *Node) mine(ctx context.Context) error {
 			}()
 
 		case block, _ := <-n.proposedBlocks:
+			n.logger.Debugw("Proposed block appeared", "is_mining", n.isMining)
 			if n.isMining {
-				if err := block.SetHash(); err != nil {
-
-				}
-				fmt.Printf("\nPeer mined next Block '%s' faster :(\n", block.Hash.Hex())
-
+				n.logger.Warnf("Peer mined next Block '%s' faster :(", block.Hash.Hex())
 				n.removeMinedPendingTXs(block)
 				stopCurrentMining()
 			}
 
 		case <-ctx.Done():
 			ticker.Stop()
+			n.logger.Debug("Mining context cancelled")
 			return nil
 		}
 	}

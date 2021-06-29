@@ -60,16 +60,15 @@ func TestMine(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	minedBlockHash, err := minedBlock.Hash()
-	if err != nil {
+	if err := minedBlock.SetHash(); err != nil {
 		t.Fatal(err)
 	}
 
-	if !IsBlockHashValid(minedBlockHash) {
+	if !IsBlockHashValid(minedBlock.Hash) {
 		t.Fatal()
 	}
 
-	if minedBlock.Header.Miner.String() != miner.String() {
+	if minedBlock.Miner.String() != miner.String() {
 		t.Fatal("mined block miner should equal miner from pending block")
 	}
 }

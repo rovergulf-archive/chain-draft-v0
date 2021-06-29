@@ -82,6 +82,9 @@ type StatusRes struct {
 	Number     uint64                    `json:"block_number,omitempty" yaml:"number,omitempty"`
 	KnownPeers map[string]PeerNode       `json:"peers_known,omitempty" yaml:"known_peers,omitempty"`
 	PendingTXs map[string]*core.SignedTx `json:"pending_txs,omitempty" yaml:"pending_t_xs,omitempty"`
+	IsMining   bool                      `json:"is_mining" yaml:"is_mining"`
+	DbSizeLsm  int64                     `json:"db_size_lsm" yaml:"db_size_lsm"`
+	DbSizeVlog int64                     `json:"db_size_vlog" yaml:"db_size_vlog"`
 }
 
 type SyncRes struct {

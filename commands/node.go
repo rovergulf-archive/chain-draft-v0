@@ -40,7 +40,7 @@ func nodeRunCmd() *cobra.Command {
 		TraverseChildren: true,
 	}
 
-	nodeRunCmd.Flags().StringP("address", "a", "", "Blockchain address")
+	addAddressFlag(nodeRunCmd)
 	addNodeIdFlag(nodeRunCmd)
 
 	// node

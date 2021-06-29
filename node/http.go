@@ -26,6 +26,8 @@ func (n *Node) serveHttp() error {
 
 	r.HandleFunc(endpointStatus, n.NodeStatus).Methods(http.MethodGet)
 
+	r.HandleFunc("/blocks/latest", n.LatestBlock).Methods(http.MethodGet)
+	r.HandleFunc("/blocks/{hash}", n.FindBlock).Methods(http.MethodGet)
 	r.HandleFunc("/balances", n.ListBalances).Methods(http.MethodGet)
 	r.HandleFunc("/balances/{addr}", n.GetBalance).Methods(http.MethodGet)
 	r.HandleFunc("/tx/add", n.TxAdd).Methods(http.MethodGet)
@@ -138,11 +140,15 @@ func (n *Node) NodeStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	lsm, vlog := n.bc.Db.Size()
 	n.httpResponse(w, StatusRes{
 		LastHash:   lb.Hash.Hex(),
 		Number:     n.bc.ChainLength.Uint64(),
 		KnownPeers: n.knownPeers,
 		PendingTXs: n.pendingTXs,
+		IsMining:   n.isMining,
+		DbSizeLsm:  lsm,
+		DbSizeVlog: vlog,
 	})
 }
 
@@ -204,8 +210,31 @@ func (n *Node) TxAdd(w http.ResponseWriter, r *http.Request) {
 	n.httpResponse(w, true, http.StatusNotImplemented)
 }
 
-func (n *Node) LastBlock(w http.ResponseWriter, r *http.Request) {
+func (n *Node) LatestBlock(w http.ResponseWriter, r *http.Request) {
 	//ctx := r.Context()
-	n.logger.Debug("http server LastBlock called")
-	n.httpResponse(w, true, http.StatusNotImplemented)
+	b, err := n.bc.GetBlock(n.bc.LastHash)
+	if err != nil {
+		n.httpResponse(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	n.httpResponse(w, b)
+}
+
+func (n *Node) FindBlock(w http.ResponseWriter, r *http.Request) {
+	//ctx := r.Context()
+	vars := mux.Vars(r)
+	hash := vars["hash"]
+	if len(hash) == 0 {
+		n.httpResponse(w, fmt.Errorf("invalid hash: %s", hash), http.StatusBadRequest)
+		return
+	}
+
+	b, err := n.bc.GetBlock(common.HexToHash(hash))
+	if err != nil {
+		n.httpResponse(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	n.httpResponse(w, b)
 }

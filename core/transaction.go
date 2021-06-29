@@ -6,11 +6,17 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"github.com/ethereum/go-ethereum/common"
+	"time"
 )
 
 const (
 	TxFee   = uint64(50)
 	TxLimit = uint64(1 << 10)
+)
+
+var (
+	txPrefix       = []byte("tx/")
+	txPrefixLength = len(txPrefix)
 )
 
 // Transaction represents a Bitcoin transaction
@@ -22,7 +28,7 @@ type Transaction struct {
 	Gas      uint64          `json:"gas" yaml:"gas"`
 	GasPrice uint64          `json:"gas_price" yaml:"gas_price"`
 	Data     []byte          `json:"data" yaml:"data"` // contract data
-	Time     uint64          `json:"time" yaml:"time"`
+	Time     int64           `json:"time" yaml:"time"`
 }
 
 type SignedTx struct {
@@ -54,15 +60,9 @@ func (tx *Transaction) Serialize() ([]byte, error) {
 	return encoded.Bytes(), nil
 }
 
-func DeserializeTransaction(data []byte) (*Transaction, error) {
-	var transaction Transaction
-
+func (tx *Transaction) Deserialize(data []byte) error {
 	decoder := gob.NewDecoder(bytes.NewReader(data))
-	if err := decoder.Decode(&transaction); err != nil {
-		return nil, err
-	}
-
-	return &transaction, nil
+	return decoder.Decode(tx)
 }
 
 func (tx Transaction) Encode() ([]byte, error) {
@@ -87,6 +87,6 @@ func NewTransaction(from, to common.Address, amount int64, nonce uint64, data []
 		Gas:      0,
 		GasPrice: 0,
 		Data:     data,
-		Time:     0,
+		Time:     time.Now().Unix(),
 	}, nil
 }

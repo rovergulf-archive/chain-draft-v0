@@ -17,15 +17,15 @@ type Block struct {
 	PrevHash     common.Hash    `json:"prev_hash" yaml:"prev_hash"`
 	Hash         common.Hash    `json:"hash" yaml:"hash"`
 	Number       uint64         `json:"number" yaml:"number"`
-	Nonce        uint32         `json:"nonce" yaml:"nonce"`
-	Difficulty   uint32         `json:"difficulty" yaml:"difficulty"`
+	Nonce        uint64         `json:"nonce" yaml:"nonce"`
+	Difficulty   uint64         `json:"difficulty" yaml:"difficulty"`
 	Timestamp    int64          `json:"timestamp" yaml:"timestamp"`
 	Miner        common.Address `json:"miner" yaml:"miner"`
 	Transactions []*SignedTx    `json:"transactions" yaml:"transactions"`
 }
 
 // NewBlock creates and returns Block
-func NewBlock(prev common.Hash, number uint64, nonce uint32, time int64, miner common.Address, txs []*SignedTx) *Block {
+func NewBlock(prev common.Hash, number uint64, nonce uint64, time int64, miner common.Address, txs []*SignedTx) *Block {
 	return &Block{
 		PrevHash:     prev,
 		Number:       number,

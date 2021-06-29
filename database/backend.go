@@ -19,11 +19,13 @@ type Config struct {
 
 // Backend represents multiple drivers storage interface
 type Backend interface {
+	LatestBlock() (*core.Block, error)
 	AddBlock(key string, block core.Block) error
 	GetBlock(key string) (*core.Block, error)
-	Put(key string, data []byte) error
-	Get(key string) ([]byte, error)
-	List(key string) ([][]byte, error)
+	GetBlocks() ([]*core.Block, error)
+	SaveTx(key string, data []byte) error
+	FindTransaction(key string) ([]byte, error)
+	ListTransactions() ([][]byte, error)
 	Delete(key string) error
 
 	Shutdown()

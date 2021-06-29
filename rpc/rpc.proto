@@ -1,0 +1,53 @@
+syntax = "proto3";
+package rovergulf.proto.rbn.v1;
+option go_package = "github.com/rovergulf/rbn/rpc";
+
+service NodeService {
+  rpc Check(HealthCheckRequest) returns (HealthCheckResponse);
+
+
+}
+
+// this is standard definition from: https://github.com/grpc/grpc/blob/v1.15.0/doc/health-checking.md
+message HealthCheckRequest {
+  string service = 1;
+}
+
+message HealthCheckResponse {
+  enum ServingStatus {
+    UNKNOWN = 0;
+    SERVING = 1;
+    NOT_SERVING = 2;
+  }
+  ServingStatus status = 1;
+}
+
+message CallRequest {
+  enum Command {
+    EMPTY = 0;
+    ADD_PEER = 1;
+    SYNC_PEERS = 2;
+    SYNC_CHAIN = 3;
+    SYNC_GENESIS = 4;
+    SYNC_TX = 5;
+    SYNC_ACC = 6;
+    WALLET_DERIVE = 7;
+    WALLED_DROP = 8;
+    BALANCE_GET = 9;
+  }
+  Command cmd = 1;
+  bytes data = 2;
+}
+
+message CallResponse {
+  int32 status = 1;
+  bytes data = 2;
+}
+
+message Node {
+  string address = 1;
+  string ip = 2;
+  int32 port = 3;
+  string node_id = 4;
+
+}

@@ -1,7 +1,6 @@
 package core
 
 import (
-	"bytes"
 	"fmt"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
@@ -247,54 +246,6 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 	})
 }
 
-//// MineBlock mines a new block with the provided transactions
-//func (bc *Blockchain) MineBlock(transactions []*SignedTx) (*Block, error) {
-//	var lastHash []byte
-//	var lastHeight uint64
-//
-//	if err := bc.Db.View(func(txn *badger.Txn) error {
-//		lh, err := txn.Get([]byte("lh"))
-//		if err != nil {
-//			bc.logger.Errorf("Unable to get last hash value: %s", err)
-//			return err
-//		}
-//
-//		return lh.Value(func(val []byte) error {
-//			lastHash = val
-//			lb, err := txn.Get(val)
-//			if err != nil {
-//				return err
-//			}
-//
-//			return lb.Value(func(val []byte) error {
-//				lastBlock, err := DeserializeBlock(val)
-//				if err != nil {
-//					return err
-//				} else {
-//					lastHeight = lastBlock.Number
-//				}
-//				return nil
-//			})
-//		})
-//	}); err != nil {
-//		bc.logger.Errorf("Unable to get last hash: %s", err)
-//		return nil, err
-//	}
-//
-//	newBlock := &Block{}
-//	//newBlock, err := NewBlock(lastHash, lastHeight+1, 0, now, nil, transactions)
-//	//if err != nil {
-//	//	return nil, err
-//	//}
-//
-//	if err := bc.AddBlock(newBlock); err != nil {
-//		bc.logger.Errorf("Unable to start transaction: %s", err)
-//		return nil, err
-//	}
-//
-//	return newBlock, nil
-//}
-
 func (bc *Blockchain) GetBestHeight() (uint64, error) {
 	var lastBlockHeight uint64
 
@@ -394,110 +345,25 @@ func (bc *Blockchain) GetGenesis() (*Genesis, error) {
 	return &g, nil
 }
 
-//
-//func (bc *Blockchain) FindUTXO() (map[string]TxOutputs, error) {
-//	UTXO := make(map[string]TxOutputs)
-//	spentTXOs := make(map[string][]int)
-//
-//	iter := bc.Iterator()
-//
-//	for {
-//		block, err := iter.Next()
-//		if err != nil {
-//			return nil, err
-//		}
-//
-//		for _, tx := range block.Transactions {
-//			txID := hex.EncodeToString(tx.ID)
-//
-//		Outputs:
-//			for outIdx, out := range tx.Outputs {
-//				if spentTXOs[txID] != nil {
-//					for _, spentOut := range spentTXOs[txID] {
-//						if spentOut == outIdx {
-//							continue Outputs
-//						}
-//					}
-//				}
-//				outs := UTXO[txID]
-//				outs.Outputs = append(outs.Outputs, out)
-//				UTXO[txID] = outs
-//			}
-//
-//			if !tx.IsCoinbase() {
-//				for _, in := range tx.Inputs {
-//					inTxID := hex.EncodeToString(in.ID)
-//					spentTXOs[inTxID] = append(spentTXOs[inTxID], in.Out)
-//				}
-//			}
-//		}
-//
-//		if len(block.PrevHash) == 0 {
-//			break
-//		}
-//	}
-//
-//	return UTXO, nil
-//}
-
 func (bc *Blockchain) FindTransaction(txId []byte) (*SignedTx, error) {
-	iter := bc.Iterator()
+	var tx SignedTx
 
-	for {
-		block, err := iter.Next()
+	if err := bc.Db.View(func(txn *badger.Txn) error {
+		key := append(txPrefix, txId...)
+		item, err := txn.Get(key)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
-		for _, tx := range block.Transactions {
-			txHash, err := tx.Hash()
-			if err != nil {
-				return nil, err
-			}
-
-			if bytes.Compare(txHash, txId) == 0 {
-				return tx, nil
-			}
-		}
-
-		if len(block.PrevHash.Bytes()) == 0 {
-			break
-		}
+		return item.Value(func(val []byte) error {
+			return tx.Deserialize(val)
+		})
+	}); err != nil {
+		return nil, err
 	}
 
-	return nil, fmt.Errorf("transaction does not exist")
+	return &tx, nil
 }
-
-//func (bc *Blockchain) SignTransaction(tx *Transaction, privKey *ecdsa.PrivateKey) error {
-//	prevTXs := make(map[string]Transaction)
-//
-//	for _, in := range tx.Inputs {
-//		prevTX, err := bc.FindTransaction(in.ID)
-//		if err != nil {
-//			return err
-//		}
-//		prevTXs[hex.EncodeToString(prevTX.ID)] = *prevTX
-//	}
-//
-//	return tx.Sign(privKey, prevTXs)
-//}
-//
-//func (bc *Blockchain) VerifyTransaction(tx *Transaction) error {
-//	if tx.IsCoinbase() {
-//		return nil
-//	}
-//	prevTXs := make(map[string]Transaction)
-//
-//	for _, in := range tx.Inputs {
-//		prevTX, err := bc.FindTransaction(in.ID)
-//		if err != nil {
-//			return err
-//		}
-//		prevTXs[hex.EncodeToString(prevTX.ID)] = *prevTX
-//	}
-//
-//	return tx.Verify(prevTXs)
-//}
 
 func (bc *Blockchain) Shutdown() {
 	if bc.Db != nil {

@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
+## 29 Jun 2021
+
+### Added
+- Added get block http handler
+
+### Changed
+
+### Fixed
+
+### Removed
+
+
 ## 28 Jun 2021
 
 ### Added
@@ -12,10 +24,6 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Updated transaction signing using etherium SDK
 - Use Ether-like wallet balance design instead Bitcoin UTXO
-
-### Fixed
-
-### Removed
 
 
 ## 3 Jun 2021
