@@ -88,7 +88,7 @@ func (n *Node) syncBlocks(peer PeerNode, status *StatusRes) error {
 	}
 
 	// If it's the genesis block and we already synced it, ignore it
-	if status.Number == 0 && len(n.bc.LastHash) == 0 {
+	if status.Number == 0 && len(n.bc.LastHash.Bytes()) == 0 {
 		return nil
 	}
 
@@ -97,7 +97,7 @@ func (n *Node) syncBlocks(peer PeerNode, status *StatusRes) error {
 	if localBlockNumber == 0 && status.Number == 0 {
 		newBlocksCount = 1
 	}
-	fmt.Printf("Found %d new blocks from Peer %s\n", newBlocksCount, peer.TcpAddress())
+	n.logger.Infof("Found %d new blocks from Peer %s", newBlocksCount, peer.TcpAddress())
 
 	blocks, err := n.fetchBlocksFromPeer(peer, n.bc.LastHash)
 	if err != nil {
@@ -109,7 +109,7 @@ func (n *Node) syncBlocks(peer PeerNode, status *StatusRes) error {
 			return err
 		}
 
-		n.proposedBlocks <- block
+		n.newSyncBlocks <- *block
 	}
 
 	return nil

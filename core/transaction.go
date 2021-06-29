@@ -2,10 +2,13 @@ package core
 
 import (
 	"bytes"
+	"crypto/elliptic"
 	"crypto/sha256"
 	"encoding/gob"
 	"encoding/json"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"time"
 )
 
@@ -15,6 +18,7 @@ const (
 )
 
 var (
+	txRewardData   = []byte("reward")
 	txPrefix       = []byte("tx/")
 	txPrefixLength = len(txPrefix)
 )
@@ -23,7 +27,7 @@ var (
 type Transaction struct {
 	From     common.Address  `json:"from" yaml:"from"`
 	To       *common.Address `json:"to" yaml:"to"` // destination of contract, use nil for contract creation
-	Value    int64           `json:"value" yaml:"value"`
+	Value    uint64          `json:"value" yaml:"value"`
 	Nonce    uint64          `json:"nonce" yaml:"nonce"`
 	Gas      uint64          `json:"gas" yaml:"gas"`
 	GasPrice uint64          `json:"gas_price" yaml:"gas_price"`
@@ -37,19 +41,19 @@ type SignedTx struct {
 }
 
 // Hash returns a hash of the transaction
-func (tx *Transaction) Hash() ([]byte, error) {
+func (tx *Transaction) Hash() (common.Hash, error) {
 	txCopy := *tx
 
 	serializedCopy, err := txCopy.Serialize()
 	if err != nil {
-		return nil, err
+		return common.Hash{}, err
 	}
 
-	hash := sha256.Sum256(serializedCopy)
-	return hash[:], nil
+	return sha256.Sum256(serializedCopy), nil
 }
 
-func (tx *Transaction) Serialize() ([]byte, error) {
+// Serialize encodes Transaction with gob encoder
+func (tx Transaction) Serialize() ([]byte, error) {
 	var encoded bytes.Buffer
 
 	enc := gob.NewEncoder(&encoded)
@@ -60,25 +64,32 @@ func (tx *Transaction) Serialize() ([]byte, error) {
 	return encoded.Bytes(), nil
 }
 
+// Deserialize decodes and returns valid Transaction
 func (tx *Transaction) Deserialize(data []byte) error {
 	decoder := gob.NewDecoder(bytes.NewReader(data))
 	return decoder.Decode(tx)
 }
 
-func (tx Transaction) Encode() ([]byte, error) {
-	return json.Marshal(tx)
-}
-
-func DecodeTransaction(data []byte) (*Transaction, error) {
-	var transaction Transaction
-	if err := json.Unmarshal(data, &transaction); err != nil {
+func (tx Transaction) MarshalJSON() ([]byte, error) {
+	var res bytes.Buffer
+	encoder := json.NewEncoder(&res)
+	if err := encoder.Encode(tx); err != nil {
 		return nil, err
 	}
-	return &transaction, nil
+
+	return res.Bytes(), nil
+}
+
+func (tx *Transaction) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data, tx)
 }
 
 // NewTransaction creates a new transaction
-func NewTransaction(from, to common.Address, amount int64, nonce uint64, data []byte) (*Transaction, error) {
+func NewTransaction(from, to common.Address, amount uint64, nonce uint64, data []byte) (*Transaction, error) {
+	if from == to {
+		return nil, fmt.Errorf("transaction cannot be sent to yourself")
+	}
+
 	return &Transaction{
 		From:     from,
 		To:       &to,
@@ -89,4 +100,30 @@ func NewTransaction(from, to common.Address, amount int64, nonce uint64, data []
 		Data:     data,
 		Time:     time.Now().Unix(),
 	}, nil
+}
+
+func (t SignedTx) IsAuthentic() (bool, error) {
+	txHash, err := t.Transaction.Hash()
+	if err != nil {
+		return false, err
+	}
+
+	recoveredPubKey, err := crypto.SigToPub(txHash[:], t.Sig)
+	if err != nil {
+		return false, err
+	}
+
+	recoveredPubKeyBytes := elliptic.Marshal(crypto.S256(), recoveredPubKey.X, recoveredPubKey.Y)
+	recoveredPubKeyBytesHash := crypto.Keccak256(recoveredPubKeyBytes[1:])
+	recoveredAccount := common.BytesToAddress(recoveredPubKeyBytesHash[12:])
+
+	return recoveredAccount.Hex() == t.From.Hex(), nil
+}
+
+func (tx *Transaction) IsReward() bool {
+	return bytes.Compare(tx.Data, txRewardData) == 0
+}
+
+func (tx *Transaction) Cost() uint64 {
+	return tx.Value + TxFee
 }

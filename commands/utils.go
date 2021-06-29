@@ -2,8 +2,9 @@ package commands
 
 import (
 	"github.com/rovergulf/rbn/core"
+	"github.com/rovergulf/rbn/node"
 	"github.com/rovergulf/rbn/pkg/config"
-	"github.com/rovergulf/rbn/pkg/response"
+	"github.com/rovergulf/rbn/pkg/resutil"
 	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -20,17 +21,22 @@ func getBackupDirPath() string {
 	return path.Join(getNodeDataPath(), viper.GetString("backup_dir"))
 }
 
-func getDbFilePath() string {
+func getChainDbFilePath() string {
 	return path.Join(getNodeDataPath(), core.DbFileName)
 }
 
-func getWalletFilePath() string {
+func getWalletsDbFilePath() string {
 	return path.Join(getNodeDataPath(), wallets.DbWalletFile)
+}
+
+func getNodeDbFilePath() string {
+	return path.Join(getNodeDataPath(), node.DbFileName)
 }
 
 func getBlockchainConfig(cmd *cobra.Command) config.Options {
 	address := viper.GetString("address")
 	nodeId := viper.GetString("node_id")
+	minerAuth := viper.GetString("miner_auth")
 
 	if len(nodeId) == 0 {
 		nodeId, _ = cmd.Flags().GetString("node-id")
@@ -42,14 +48,20 @@ func getBlockchainConfig(cmd *cobra.Command) config.Options {
 		viper.Set("address", address)
 	}
 
+	if len(minerAuth) == 0 {
+		minerAuth, _ = cmd.Flags().GetString("auth")
+		viper.Set("miner_auth", minerAuth)
+	}
+
 	opts := config.Options{
 		Address: address,
 		NodeId:  nodeId,
 		Logger:  logger,
 	}
 
-	opts.DbFilePath = getDbFilePath()
-	opts.WalletsFilePath = getWalletFilePath()
+	opts.DbFilePath = getChainDbFilePath()
+	opts.WalletsFilePath = getWalletsDbFilePath()
+	opts.NodeFilePath = getNodeDbFilePath()
 
 	return opts
 }
@@ -57,9 +69,9 @@ func getBlockchainConfig(cmd *cobra.Command) config.Options {
 func writeOutput(cmd *cobra.Command, v interface{}) error {
 	outputFormat, _ := cmd.Flags().GetString("output")
 	if outputFormat == "json" {
-		return response.WriteJSON(os.Stdout, logger, v)
+		return resutil.WriteJSON(os.Stdout, logger, v)
 	} else {
-		return response.WriteYAML(os.Stdout, logger, v)
+		return resutil.WriteYAML(os.Stdout, logger, v)
 	}
 }
 

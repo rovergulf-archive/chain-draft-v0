@@ -11,10 +11,11 @@ import (
 type Options struct {
 	DbFilePath      string             `json:"db_file_path" yaml:"db_file_path"`
 	WalletsFilePath string             `json:"wallets_file_path" yaml:"wallets_file_path"`
-	GenesisFilePath string             `json:"genesis_file_path" yaml:"genesis_file_path"`
+	NodeFilePath    string             `json:"node_file_path" yaml:"node_file_path"`
 	Address         string             `json:"address" yaml:"address"`
 	NodeId          string             `json:"node_id" yaml:"node_id"`
 	Miner           string             `json:"miner" yaml:"miner"`
+	MinerAuth       string             `json:"auth" yaml:"auth"`
 	Badger          badger.Options     `json:"-" yaml:"-"`
 	Logger          *zap.SugaredLogger `json:"-" yaml:"-"`
 	Tracer          opentracing.Tracer `json:"-" yaml:"-"`

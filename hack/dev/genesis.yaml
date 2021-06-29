@@ -3,10 +3,11 @@ chain_id: "Rovergulf Blockchain Network ledger"
 symbol: "TBB"
 difficulty: 400
 gasLimit: 2100000
-coinbase: "0x59fc6df01d2e84657faba24dc96e14871192bda4"
+coinbase: "0x5793f98ea0911e12742c785c316903b50b0ddaca"
 alloc:
   0xC777Cc593a3C45fb6038De239BADE30eFB6821a3:
     balance: 1000
+    auth:
   0x19c289D74b4ef97af0B30206324CfC954dE17b0f:
     balance: 1000
   0x412F094e3D1565b9fb97203f677138b5dA740591:

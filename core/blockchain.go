@@ -1,10 +1,12 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/opentracing/opentracing-go"
+	"github.com/rovergulf/rbn/core/types"
 	"github.com/rovergulf/rbn/database/badgerdb"
 	"github.com/rovergulf/rbn/pkg/config"
 	"github.com/spf13/viper"
@@ -33,10 +35,8 @@ type Blockchain struct {
 	Balances    map[common.Address]Balance
 	LastHash    common.Hash
 	ChainLength *big.Int
-	Db          *badger.DB `json:"-" yaml:"-"`
 
-	genesis *Genesis
-
+	db     *badger.DB
 	logger *zap.SugaredLogger
 	tracer opentracing.Tracer
 	closer io.Closer
@@ -51,6 +51,10 @@ func InitBlockchain(opts config.Options) (*Blockchain, error) {
 	gen, err := loadGenesisFromFile(viper.GetString("genesis"))
 	if err != nil {
 		opts.Logger.Errorf("Unable to load genesis file: %s", err)
+		return nil, err
+	}
+
+	if err := gen.Validate(); err != nil {
 		return nil, err
 	}
 
@@ -79,11 +83,10 @@ func InitBlockchain(opts config.Options) (*Blockchain, error) {
 	}
 
 	bc := Blockchain{
-		LastHash:    genesis.Hash,
+		LastHash:    common.Hash{},
 		Balances:    make(map[common.Address]Balance),
 		ChainLength: big.NewInt(0),
-		Db:          db,
-		genesis:     gen,
+		db:          db,
 		logger:      opts.Logger,
 		tracer:      opts.Tracer,
 	}
@@ -91,9 +94,15 @@ func InitBlockchain(opts config.Options) (*Blockchain, error) {
 	for addr := range gen.Alloc {
 		bc.Balances[addr] = Balance{
 			Address: addr,
-			Balance: big.NewInt(gen.Alloc[addr].Balance),
+			Balance: gen.Alloc[addr].Balance,
 			Nonce:   gen.Alloc[addr].Nonce,
 		}
+	}
+
+	bc.Balances[gen.Coinbase] = Balance{
+		Address: gen.Coinbase,
+		Balance: 0,
+		Nonce:   1,
 	}
 
 	if err := db.Update(func(txn *badger.Txn) error {
@@ -112,7 +121,7 @@ func InitBlockchain(opts config.Options) (*Blockchain, error) {
 			return err
 		}
 
-		if err := txn.Set([]byte("cl"), []byte{1}); err != nil {
+		if err := txn.Set([]byte("cl"), []byte{0}); err != nil {
 			opts.Logger.Errorf("Unable to set chain length: %s", err)
 			return err
 		}
@@ -123,15 +132,13 @@ func InitBlockchain(opts config.Options) (*Blockchain, error) {
 			if err != nil {
 				return err
 			}
-			fmt.Println("save balance for ", addr.Hex())
+
 			balanceKey := append(balancesPrefix, addr.Bytes()...)
 			if err := txn.Set(balanceKey, balanceEncoded); err != nil {
 				opts.Logger.Errorf("Unable to save balance: %s", err)
 				return err
 			}
 		}
-
-		bc.LastHash = genesis.Hash
 
 		return nil
 	}); err != nil {
@@ -150,7 +157,6 @@ func ContinueBlockchain(opts config.Options) (*Blockchain, error) {
 
 	b := Blockchain{
 		Balances:    make(map[common.Address]Balance),
-		genesis:     new(Genesis),
 		ChainLength: big.NewInt(0),
 		logger:      opts.Logger,
 		tracer:      opts.Tracer,
@@ -187,8 +193,12 @@ func ContinueBlockchain(opts config.Options) (*Blockchain, error) {
 		return nil, err
 	}
 
-	b.Db = db
+	b.db = db
 	return &b, nil
+}
+
+func (bc *Blockchain) DbSize() (int64, int64) {
+	return bc.db.Size()
 }
 
 // AddBlock adds a block with the provided transactions
@@ -197,14 +207,14 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 		return fmt.Errorf("bad block hash")
 	}
 
-	return bc.Db.Update(func(txn *badger.Txn) error {
+	blockData, err := block.Serialize()
+	if err != nil {
+		return err
+	}
+
+	return bc.db.Update(func(txn *badger.Txn) error {
 		if _, err := txn.Get(block.Hash.Bytes()); err == nil {
 			return nil
-		}
-
-		blockData, err := block.Serialize()
-		if err != nil {
-			return err
 		}
 
 		if err := txn.Set(block.Hash.Bytes(), blockData); err != nil {
@@ -249,7 +259,7 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 func (bc *Blockchain) GetBestHeight() (uint64, error) {
 	var lastBlockHeight uint64
 
-	if err := bc.Db.View(func(txn *badger.Txn) error {
+	if err := bc.db.View(func(txn *badger.Txn) error {
 		lastHash, err := txn.Get([]byte("lh"))
 		if err != nil {
 			bc.logger.Errorf("Unable to get last hash value: %s", err)
@@ -283,7 +293,7 @@ func (bc *Blockchain) GetBestHeight() (uint64, error) {
 func (bc *Blockchain) GetBlock(hash common.Hash) (Block, error) {
 	var block Block
 
-	err := bc.Db.View(func(txn *badger.Txn) error {
+	err := bc.db.View(func(txn *badger.Txn) error {
 		if item, err := txn.Get(hash.Bytes()); err != nil {
 			return fmt.Errorf("block is not found")
 		} else {
@@ -319,7 +329,7 @@ func (bc *Blockchain) GetBlockHashes() ([]common.Hash, error) {
 
 		blocks = append(blocks, block.Hash)
 
-		if len(block.PrevHash) == 0 {
+		if !IsBlockHashValid(block.PrevHash) {
 			break
 		}
 	}
@@ -329,14 +339,14 @@ func (bc *Blockchain) GetBlockHashes() ([]common.Hash, error) {
 
 func (bc *Blockchain) GetGenesis() (*Genesis, error) {
 	var g Genesis
-	if err := bc.Db.View(func(txn *badger.Txn) error {
+	if err := bc.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte("g"))
 		if err != nil {
 			return err
 		}
 
 		return item.Value(func(val []byte) error {
-			return g.UnmarshalJSON(val)
+			return json.Unmarshal(val, &g)
 		})
 	}); err != nil {
 		return nil, err
@@ -348,7 +358,7 @@ func (bc *Blockchain) GetGenesis() (*Genesis, error) {
 func (bc *Blockchain) FindTransaction(txId []byte) (*SignedTx, error) {
 	var tx SignedTx
 
-	if err := bc.Db.View(func(txn *badger.Txn) error {
+	if err := bc.db.View(func(txn *badger.Txn) error {
 		key := append(txPrefix, txId...)
 		item, err := txn.Get(key)
 		if err != nil {
@@ -365,10 +375,56 @@ func (bc *Blockchain) FindTransaction(txId []byte) (*SignedTx, error) {
 	return &tx, nil
 }
 
+func (bc *Blockchain) ApplyTx(txHash common.Hash, tx SignedTx) error {
+	encodedTx, err := tx.Serialize()
+	if err != nil {
+		return err
+	}
+
+	return bc.db.Update(func(txn *badger.Txn) error {
+		fromAddr, err := bc.GetBalance(tx.From)
+		if err != nil {
+			return err
+		}
+
+		var toAddr *Balance
+		if tx.To != nil {
+			toAddr, err = bc.GetBalance(*tx.To)
+			if err != nil {
+				return err
+			}
+		} else if tx.Data != nil {
+			return fmt.Errorf("not implemented")
+		} else {
+			return fmt.Errorf("invalid transaction")
+		}
+
+		fromAddr.Balance = -uint64(tx.Value)
+		toAddr.Balance = +uint64(tx.Value)
+
+		fromAddr.Nonce = +tx.Nonce
+
+		return txn.Set(txHash.Bytes(), encodedTx)
+	})
+}
+
+func (bc *Blockchain) GetReceipt(tx *Transaction) (types.Receipt, error) {
+	var r types.Receipt
+
+	return r, nil
+}
+
 func (bc *Blockchain) Shutdown() {
-	if bc.Db != nil {
-		if err := bc.Db.Close(); err != nil {
+	if bc.db != nil {
+		if err := bc.db.Close(); err != nil {
 			bc.logger.Errorf("Unable to close db: %s", err)
 		}
 	}
+}
+
+func IsBlockHashValid(hash common.Hash) bool {
+	return fmt.Sprintf("%x", hash[0]) == "0" &&
+		fmt.Sprintf("%x", hash[1]) == "0" &&
+		fmt.Sprintf("%x", hash[2]) == "0" &&
+		fmt.Sprintf("%x", hash[3]) != "0"
 }

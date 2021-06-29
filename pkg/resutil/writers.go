@@ -1,4 +1,4 @@
-package response
+package resutil
 
 import (
 	"bytes"

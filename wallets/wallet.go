@@ -9,7 +9,6 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
 	"github.com/rovergulf/rbn/core"
@@ -17,10 +16,8 @@ import (
 )
 
 type Wallet struct {
-	Address common.Address `json:"address" yaml:"address"`
-	Balance int            `json:"balance" yaml:"balance"`
-	Data    []byte         `json:"-" yaml:"-"`
-	Key     *keystore.Key  `json:"-" yaml:"-"`
+	Code []byte `json:"code" yaml:"code"`
+	*keystore.Key
 }
 
 func (w *Wallet) Serialize() ([]byte, error) {
@@ -52,6 +49,10 @@ func (w *Wallet) SignTx(tx *core.Transaction) (*core.SignedTx, error) {
 	}, nil
 }
 
+func (w *Wallet) GetPassphrase() string {
+	return string(w.Code)
+}
+
 func DeserializeWallet(data []byte) (*Wallet, error) {
 	var w Wallet
 
@@ -76,6 +77,18 @@ func SignTx(tx core.Transaction, privKey *ecdsa.PrivateKey) ([]byte, error) {
 	}
 
 	return sig, nil
+}
+
+func NewSignedTx(tx *core.Transaction, privKey *ecdsa.PrivateKey) (*core.SignedTx, error) {
+	sig, err := SignTx(*tx, privKey)
+	if err != nil {
+		return nil, nil
+	}
+
+	return &core.SignedTx{
+		Transaction: *tx,
+		Sig:         sig,
+	}, nil
 }
 
 func Sign(msg []byte, privKey *ecdsa.PrivateKey) (sig []byte, err error) {

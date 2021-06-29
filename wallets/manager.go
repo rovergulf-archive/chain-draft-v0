@@ -1,10 +1,7 @@
 package wallets
 
 import (
-	"bytes"
 	"context"
-	"crypto/elliptic"
-	"encoding/gob"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
@@ -23,10 +20,7 @@ type Backend interface {
 }
 
 type Manager struct {
-	Db *badger.DB `json:"-" yaml:"-"`
-
-	backend Backend
-
+	db     *badger.DB
 	logger *zap.SugaredLogger
 	quit   chan struct{}
 }
@@ -41,38 +35,38 @@ func NewManager(opts config.Options) (*Manager, error) {
 	}
 
 	return &Manager{
-		Db:     db,
+		db:     db,
 		logger: opts.Logger,
 	}, err
 }
 
+func (m *Manager) DbSize() (int64, int64) {
+	return m.db.Size()
+}
+
 func (m *Manager) Shutdown() {
-	if m.Db != nil {
-		if err := m.Db.Close(); err != nil {
+	if m.db != nil {
+		if err := m.db.Close(); err != nil {
 			m.logger.Errorf("Unable to close wallets db: %s", err)
 		}
 	}
 }
 
-func (m *Manager) AddWallet(auth string) (*Wallet, error) {
-	key, err := NewRandomKey()
-	if err != nil {
-		return nil, err
-	}
-
+func (m *Manager) AddWallet(key *keystore.Key, auth string) (*Wallet, error) {
 	encryptedKey, err := keystore.EncryptKey(key, auth, keystore.StandardScryptN, keystore.StandardScryptP)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := m.Db.Update(func(txn *badger.Txn) error {
+	if err := m.db.Update(func(txn *badger.Txn) error {
 		return txn.Set(key.Address.Bytes(), encryptedKey)
 	}); err != nil {
 		return nil, err
 	}
 
 	wallet := &Wallet{
-		Address: key.Address,
+		Code: []byte(auth),
+		Key:  key,
 	}
 
 	return wallet, nil
@@ -81,7 +75,7 @@ func (m *Manager) AddWallet(auth string) (*Wallet, error) {
 func (m *Manager) GetAllAddresses() ([]common.Address, error) {
 	var addresses []common.Address
 
-	if err := m.Db.View(func(txn *badger.Txn) error {
+	if err := m.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchSize = 10
 		it := txn.NewIterator(opts)
@@ -99,39 +93,38 @@ func (m *Manager) GetAllAddresses() ([]common.Address, error) {
 	return addresses, nil
 }
 
-func (m Manager) GetWallet(address common.Address) (*Wallet, error) {
-	var w *Wallet
-
-	if err := m.Db.View(func(txn *badger.Txn) error {
+func (m *Manager) FindAccountKey(address common.Address) ([]byte, error) {
+	var privateKey []byte
+	if err := m.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(address.Bytes())
 		if err != nil {
 			return err
 		}
 
 		return item.Value(func(val []byte) error {
-			wallet, err := DeserializeWallet(val)
-			if err != nil {
-				return err
-			}
-
-			w = wallet
+			privateKey = val
 			return nil
 		})
 	}); err != nil {
 		return nil, err
 	}
 
-	return w, nil
+	return privateKey, nil
 }
 
-func DeserializeManager(data []byte) (map[string]Wallet, error) {
-	wallets := make(map[string]Wallet)
-
-	gob.Register(elliptic.P256())
-	decoder := gob.NewDecoder(bytes.NewReader(data))
-	if err := decoder.Decode(&wallets); err != nil {
+func (m *Manager) GetWallet(address common.Address, auth string) (*Wallet, error) {
+	encryptedKey, err := m.FindAccountKey(address)
+	if err != nil {
 		return nil, err
 	}
 
-	return wallets, nil
+	key, err := keystore.DecryptKey(encryptedKey, auth)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Wallet{
+		Code: []byte(auth),
+		Key:  key,
+	}, nil
 }

@@ -79,7 +79,7 @@ func (n *Node) addPeer(peer PeerNode) error {
 		return err
 	}
 
-	return n.bc.Db.Update(func(txn *badger.Txn) error {
+	return n.db.Update(func(txn *badger.Txn) error {
 		if err := txn.Set(peer.GetId(), pn); err != nil {
 			return err
 		} else {
@@ -90,7 +90,7 @@ func (n *Node) addPeer(peer PeerNode) error {
 }
 
 func (n *Node) removePeer(peer PeerNode) error {
-	return n.bc.Db.Update(func(txn *badger.Txn) error {
+	return n.db.Update(func(txn *badger.Txn) error {
 		if err := txn.Delete(peer.GetId()); err != nil {
 			return err
 		} else {
@@ -112,6 +112,11 @@ func (pn *PeerNode) Serialize() ([]byte, error) {
 	return buff.Bytes(), nil
 }
 
+func (pn *PeerNode) Deserialize(src []byte) error {
+	decoder := gob.NewDecoder(bytes.NewReader(src))
+	return decoder.Decode(pn)
+}
+
 func DeserializePeerNode(src []byte) (*PeerNode, error) {
 	var pn PeerNode
 
@@ -121,4 +126,15 @@ func DeserializePeerNode(src []byte) (*PeerNode, error) {
 	}
 
 	return &pn, nil
+}
+
+func CollectPeerUrls(nodes map[string]PeerNode) []string {
+	var peers []string
+
+	for peer := range nodes {
+		node := nodes[peer]
+		peers = append(peers, node.TcpAddress())
+	}
+
+	return peers
 }

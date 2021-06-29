@@ -8,6 +8,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/opentracing/opentracing-go"
 	"github.com/rovergulf/rbn/core"
+	"github.com/rovergulf/rbn/database/badgerdb"
 	"github.com/rovergulf/rbn/pkg/config"
 	"github.com/rovergulf/rbn/pkg/exit"
 	"github.com/rovergulf/rbn/wallets"
@@ -15,11 +16,14 @@ import (
 	"github.com/uber/jaeger-client-go"
 	jconf "github.com/uber/jaeger-client-go/config"
 	"github.com/uber/jaeger-lib/metrics/prometheus"
+	"go.etcd.io/etcd/raft/v3"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 	"io"
 	"io/ioutil"
 	"net"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -36,7 +40,7 @@ const (
 	endpointSync    = "/node/sync"
 	endpointAddPeer = "/node/peer"
 
-	RootAddress  = "0x59fc6df01d2e84657faba24dc96e14871192bda4"
+	RootAddress  = "0x5793f98ea0911e12742c785c316903b50b0ddaca"
 	DefaultMiner = "0x0000000000000000000000000000000000000000"
 )
 
@@ -50,6 +54,7 @@ type Node struct {
 	wm *wallets.Manager
 	db *badger.DB
 
+	grpcServer  *grpc.Server
 	httpHandler httpServer
 	rpcListener net.Listener
 
@@ -57,12 +62,13 @@ type Node struct {
 
 	knownPeers knownPeers
 
-	pendingTXs map[string]*core.SignedTx
+	pendingTXs map[string]core.SignedTx
 
-	proposedBlocks chan *core.Block
-	proposedTXs    chan *core.SignedTx
-	errCh          chan error
+	newSyncBlocks chan core.Block
+	newSyncTXs    chan core.SignedTx
+	errCh         chan error
 
+	raftStorage *raft.MemoryStorage
 	//Lock *sync.RWMutex
 
 	logger *zap.SugaredLogger
@@ -90,13 +96,15 @@ func New(opts config.Options) (*Node, error) {
 			router: mux.NewRouter(),
 			logger: opts.Logger,
 		},
-		config:         opts,
-		bc:             nil,
-		logger:         opts.Logger,
-		knownPeers:     make(map[string]PeerNode),
-		pendingTXs:     make(map[string]*core.SignedTx),
-		proposedTXs:    make(chan *core.SignedTx),
-		proposedBlocks: make(chan *core.Block),
+		config: opts,
+		bc:     nil,
+		logger: opts.Logger,
+		knownPeers: map[string]PeerNode{
+			pn.TcpAddress(): pn,
+		},
+		pendingTXs:    make(map[string]core.SignedTx),
+		newSyncTXs:    make(chan core.SignedTx),
+		newSyncBlocks: make(chan core.Block),
 		//Lock:       new(sync.RWMutex),
 	}
 
@@ -137,6 +145,13 @@ func (n *Node) Run() error {
 		n.Shutdown()
 	})
 
+	db, err := badgerdb.OpenDB(viper.GetString("data_dir"), badger.DefaultOptions(n.config.NodeFilePath))
+	if err != nil {
+		n.logger.Errorf("Unable to open db file: %s", err)
+		return err
+	}
+	n.db = db
+
 	chain, err := core.ContinueBlockchain(n.config)
 	if err != nil {
 		return err
@@ -157,35 +172,85 @@ func (n *Node) Run() error {
 
 	go func() {
 		n.logger.Debugw("Listening gRPC", "addr", nodeAddress)
+		grpcSrv, err := n.PrepareGrpcServer()
+		if err != nil {
+			n.logger.Errorf("Unable to prepare gRPC server: %s", err)
+			n.Shutdown()
+		}
+		n.grpcServer = grpcSrv
 
+		if err := n.RunGrpcServer(nodeAddress); err != nil {
+			n.logger.Errorf("Unable to start gRPC server: %s", err)
+			n.Shutdown()
+		}
 	}()
 
 	go n.mine(ctx)
+	go n.sync(ctx)
 
 	n.logger.Infow("Listening HTTP", "addr", httpApiAddress)
 	return n.serveHttp()
 }
 
 func (n *Node) Shutdown() {
+
+	var wg sync.WaitGroup
+
+	if n.db != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := n.db.Close(); err != nil {
+				n.logger.Errorf("Unable to close node db: %s", err)
+			}
+		}()
+	}
+
 	if n.bc != nil {
-		n.bc.Shutdown()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			n.bc.Shutdown()
+		}()
 	}
 
 	if n.wm != nil {
-		n.wm.Shutdown()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			n.wm.Shutdown()
+		}()
+	}
+
+	if n.grpcServer != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			n.grpcServer.GracefulStop()
+		}()
 	}
 
 	if n.rpcListener != nil {
-		if err := n.rpcListener.Close(); err != nil {
-			n.logger.Errorf("Unable to close rpc listener: %s", err)
-		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := n.rpcListener.Close(); err != nil {
+				n.logger.Errorf("Unable to close rpc listener: %s", err)
+			}
+		}()
 	}
 
 	if n.closer != nil {
-		if err := n.closer.Close(); err != nil {
-			n.logger.Errorf("Unable to close tracing writer: %s", err)
-		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := n.closer.Close(); err != nil {
+				n.logger.Errorf("Unable to close tracing writer: %s", err)
+			}
+		}()
 	}
+
+	wg.Wait()
 
 	os.Exit(0)
 }
@@ -333,8 +398,8 @@ func (n *Node) mine(ctx context.Context) error {
 		case <-ticker.C:
 			go func() {
 				n.logger.Debugw("Check for available transactions",
-					"txs", len(n.proposedTXs), "is_mining", n.isMining)
-				if len(n.proposedTXs) > 0 && !n.isMining {
+					"txs", len(n.newSyncTXs), "is_mining", n.isMining)
+				if len(n.newSyncTXs) > 0 && !n.isMining {
 					n.isMining = true
 
 					miningCtx, stopCurrentMining = context.WithCancel(ctx)
@@ -347,11 +412,11 @@ func (n *Node) mine(ctx context.Context) error {
 				}
 			}()
 
-		case block, _ := <-n.proposedBlocks:
+		case block, _ := <-n.newSyncBlocks:
 			n.logger.Debugw("Proposed block appeared", "is_mining", n.isMining)
 			if n.isMining {
 				n.logger.Warnf("Peer mined next Block '%s' faster :(", block.Hash.Hex())
-				n.removeMinedPendingTXs(block)
+				n.removeMinedPendingTXs(&block)
 				stopCurrentMining()
 			}
 
@@ -368,10 +433,11 @@ func (n *Node) minePendingTXs(ctx context.Context) error {
 		return fmt.Errorf("no transactions available")
 	}
 
-	var txs []*core.SignedTx
+	var txs []core.SignedTx
 
 	for i := range n.pendingTXs {
-		txs = append(txs, n.pendingTXs[i])
+		tx := n.pendingTXs[i]
+		txs = append(txs, tx)
 	}
 
 	blockToMine := NewPendingBlock(
@@ -402,11 +468,25 @@ func (n *Node) removeMinedPendingTXs(block *core.Block) {
 
 	for _, tx := range block.Transactions {
 		txHash, _ := tx.Hash()
-		txh := common.BytesToHash(txHash)
-		if _, exists := n.pendingTXs[txh.Hex()]; exists {
-			fmt.Printf("\t-archiving mined TX: %s\n", txh.Hex())
+		if _, exists := n.pendingTXs[txHash.Hex()]; exists {
+			fmt.Printf("\t-archiving mined TX: %s\n", txHash.Hex())
 
-			delete(n.pendingTXs, txh.Hex())
+			delete(n.pendingTXs, txHash.Hex())
 		}
 	}
+}
+func (n *Node) AddPendingTX(tx core.SignedTx, peer PeerNode) error {
+	txHash, err := tx.Hash()
+	if err != nil {
+		return err
+	}
+
+	if err := n.bc.ApplyTx(txHash, tx); err != nil {
+		return err
+	}
+
+	n.pendingTXs[txHash.Hex()] = tx
+	n.newSyncTXs <- tx
+
+	return nil
 }

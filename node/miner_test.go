@@ -24,7 +24,7 @@ func TestValidBlockHash(t *testing.T) {
 
 	hex.Decode(hash[:], []byte(hexHash))
 
-	isValid := IsBlockHashValid(hash)
+	isValid := core.IsBlockHashValid(hash)
 	if !isValid {
 		t.Fatalf("hash '%s' starting with 6 zeroes is suppose to be valid", hexHash)
 	}
@@ -36,7 +36,7 @@ func TestInvalidBlockHash(t *testing.T) {
 
 	hex.Decode(hash[:], []byte(hexHash))
 
-	isValid := IsBlockHashValid(hash)
+	isValid := core.IsBlockHashValid(hash)
 	if isValid {
 		t.Fatal("hash is not suppose to be valid")
 	}
@@ -64,7 +64,7 @@ func TestMine(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !IsBlockHashValid(minedBlock.Hash) {
+	if !core.IsBlockHashValid(minedBlock.Hash) {
 		t.Fatal()
 	}
 

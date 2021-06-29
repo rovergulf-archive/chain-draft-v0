@@ -5,7 +5,6 @@ import (
 	"encoding/gob"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
-	"math/big"
 )
 
 var (
@@ -14,9 +13,9 @@ var (
 
 type Balance struct {
 	Address    common.Address `json:"address" yaml:"address"`
-	Balance    *big.Int       `json:"balance" yaml:"balance"`
+	Balance    uint64         `json:"balance" yaml:"balance"`
 	Nonce      uint64         `json:"nonce" yaml:"nonce"`
-	PrivateKey []byte         `json:"private_key" yaml:"private_key"`
+	PrivateKey []byte         `json:"-" yaml:"-"`
 }
 
 func (b *Balance) Serialize() ([]byte, error) {
@@ -38,15 +37,16 @@ func (b *Balance) Deserialize(data []byte) error {
 	return nil
 }
 
-type Balances struct {
-	*Blockchain
-}
+func (bc *Blockchain) GetBalance(addr common.Address) (*Balance, error) {
+	b, ok := bc.Balances[addr]
+	if ok {
+		return &b, nil
+	}
 
-func (b *Balances) GetBalance(addr common.Address) (*Balance, error) {
 	var balance Balance
 
 	key := append(balancesPrefix, addr.Bytes()...)
-	if err := b.Db.View(func(txn *badger.Txn) error {
+	if err := bc.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(key)
 		if err != nil {
 			return err
@@ -62,10 +62,10 @@ func (b *Balances) GetBalance(addr common.Address) (*Balance, error) {
 	return &balance, nil
 }
 
-func (b *Balances) ListBalances() ([]*Balance, error) {
+func (bc *Blockchain) ListBalances() ([]*Balance, error) {
 	var balances []*Balance
 
-	if err := b.Db.View(func(txn *badger.Txn) error {
+	if err := bc.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.Prefix = balancesPrefix
 		it := txn.NewIterator(opts)
@@ -84,9 +84,26 @@ func (b *Balances) ListBalances() ([]*Balance, error) {
 		}
 		return nil
 	}); err != nil {
-		b.logger.Errorw("Unable to iterate db view", "err", err)
+		bc.logger.Errorw("Unable to iterate db view", "err", err)
 		return nil, err
 	}
 
 	return balances, nil
+}
+
+func (bc *Blockchain) GetNextAccountNonce(addr common.Address) uint64 {
+	balance, ok := bc.Balances[addr]
+	if ok {
+		return balance.Balance
+	}
+
+	b, err := bc.GetBalance(addr)
+	if err != nil {
+		bc.logger.Errorw("Unable to get balance")
+		return 0
+	}
+
+	bc.Balances[addr] = *b
+
+	return b.Nonce
 }

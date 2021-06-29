@@ -10,7 +10,7 @@ import (
 // BlockchainIterator is used to iterate over blockchain blocks
 type BlockchainIterator struct {
 	CurrentHash common.Hash
-	Db          *badger.DB
+	db          *badger.DB
 	logger      *zap.SugaredLogger
 	tracer      opentracing.Tracer
 }
@@ -19,7 +19,7 @@ type BlockchainIterator struct {
 func (bc *Blockchain) Iterator() *BlockchainIterator {
 	bci := &BlockchainIterator{
 		CurrentHash: bc.LastHash,
-		Db:          bc.Db,
+		db:          bc.db,
 		logger:      bc.logger,
 		tracer:      bc.tracer,
 	}
@@ -31,7 +31,7 @@ func (bc *Blockchain) Iterator() *BlockchainIterator {
 func (i *BlockchainIterator) Next() (*Block, error) {
 	var block *Block
 
-	if err := i.Db.View(func(txn *badger.Txn) error {
+	if err := i.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(i.CurrentHash.Bytes())
 		if err != nil {
 			return err

@@ -9,8 +9,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type BlockHeader struct {
-}
+var (
+	blocksPrefix       = []byte("blocks/")
+	blocksPrefixLength = len(blocksPrefix)
+)
 
 // Block represents
 type Block struct {
@@ -21,11 +23,11 @@ type Block struct {
 	Difficulty   uint64         `json:"difficulty" yaml:"difficulty"`
 	Timestamp    int64          `json:"timestamp" yaml:"timestamp"`
 	Miner        common.Address `json:"miner" yaml:"miner"`
-	Transactions []*SignedTx    `json:"transactions" yaml:"transactions"`
+	Transactions []SignedTx     `json:"transactions" yaml:"transactions"`
 }
 
 // NewBlock creates and returns Block
-func NewBlock(prev common.Hash, number uint64, nonce uint64, time int64, miner common.Address, txs []*SignedTx) *Block {
+func NewBlock(prev common.Hash, number uint64, nonce uint64, time int64, miner common.Address, txs []SignedTx) *Block {
 	return &Block{
 		PrevHash:     prev,
 		Number:       number,
@@ -59,7 +61,7 @@ func (b *Block) HashTransactions() ([]byte, error) {
 			return nil, err
 		}
 
-		txHashes = append(txHashes, hash)
+		txHashes = append(txHashes, hash.Bytes())
 	}
 	txHash = sha256.Sum256(bytes.Join(txHashes, []byte{}))
 
@@ -75,6 +77,24 @@ func (b *Block) Serialize() ([]byte, error) {
 	}
 
 	return result.Bytes(), nil
+}
+
+// Deserialize deserializes a block from gob encoding
+func (b *Block) Deserialize(d []byte) error {
+	decoder := gob.NewDecoder(bytes.NewReader(d))
+	return decoder.Decode(b)
+}
+
+// DeserializeBlock deserializes a block from gob encoding
+func DeserializeBlock(d []byte) (*Block, error) {
+	var block Block
+
+	decoder := gob.NewDecoder(bytes.NewReader(d))
+	if err := decoder.Decode(&block); err != nil {
+		return nil, err
+	}
+
+	return &block, nil
 }
 
 // Encode serializes the block to json
@@ -95,18 +115,6 @@ func (b *Block) EncodeYaml() ([]byte, error) {
 	}
 
 	return jsonRaw, nil
-}
-
-// DeserializeBlock deserializes a block from gob encoding
-func DeserializeBlock(d []byte) (*Block, error) {
-	var block Block
-
-	decoder := gob.NewDecoder(bytes.NewReader(d))
-	if err := decoder.Decode(&block); err != nil {
-		return nil, err
-	}
-
-	return &block, nil
 }
 
 // DecodeBlock deserializes a block from json

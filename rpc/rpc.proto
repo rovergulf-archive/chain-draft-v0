@@ -5,7 +5,7 @@ option go_package = "github.com/rovergulf/rbn/rpc";
 service NodeService {
   rpc Check(HealthCheckRequest) returns (HealthCheckResponse);
 
-
+  rpc RpcCall(CallRequest) returns (CallResponse);
 }
 
 // this is standard definition from: https://github.com/grpc/grpc/blob/v1.15.0/doc/health-checking.md
@@ -26,14 +26,13 @@ message CallRequest {
   enum Command {
     EMPTY = 0;
     ADD_PEER = 1;
-    SYNC_PEERS = 2;
-    SYNC_CHAIN = 3;
-    SYNC_GENESIS = 4;
-    SYNC_TX = 5;
-    SYNC_ACC = 6;
-    WALLET_DERIVE = 7;
-    WALLED_DROP = 8;
-    BALANCE_GET = 9;
+    INVITE = 2;
+    VERSION = 3;
+    SYNC = 4;
+    BLOCK_ADD = 5;
+    BLOCK_GET = 6;
+    TX_ADD = 7;
+    TX_GET = 8;
   }
   Command cmd = 1;
   bytes data = 2;
@@ -49,5 +48,4 @@ message Node {
   string ip = 2;
   int32 port = 3;
   string node_id = 4;
-
 }

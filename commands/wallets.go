@@ -8,7 +8,6 @@ import (
 	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/cobra"
 	"github.com/tyler-smith/go-bip39"
-	"os"
 )
 
 func init() {
@@ -43,15 +42,37 @@ func walletsNewCmd() *cobra.Command {
 			}
 			defer wm.Shutdown()
 
-			// generate a random Mnemonic in English with 256 bits of entropy
-			entropy, _ := bip39.NewEntropy(256)
-			mnemonic, _ := bip39.NewMnemonic(entropy)
+			useMnemonic, _ := cmd.Flags().GetBool("mnemonic")
 
-			logger.Infof("Random Mnemonic passphrase to unlock wallet: \n\n\t%s\n", mnemonic)
-			logger.Warn("Save this passphrase to access your wallet.",
-				"There is no way to recover it, but you can change it")
+			var auth string
 
-			wallet, err := wm.AddWallet(mnemonic)
+			if !useMnemonic {
+				input, err := getPassPhrase("Enter secret passphrase to encrypt the wallet:", false)
+				if err != nil {
+					return err
+				}
+
+				if len(input) < 6 {
+					return fmt.Errorf("too weak, min 6 symbols length")
+				}
+
+				auth = input
+			} else {
+				// generate a random Mnemonic in English with 256 bits of entropy
+				entropy, _ := bip39.NewEntropy(256)
+				auth, _ = bip39.NewMnemonic(entropy)
+
+				logger.Infof("Random Mnemonic passphrase to unlock wallet: \n\n\t%s\n", auth)
+				logger.Warn("Save this passphrase to access your wallet.",
+					"There is no way to recover it, but you can change it")
+			}
+
+			key, err := wallets.NewRandomKey()
+			if err != nil {
+				return err
+			}
+
+			wallet, err := wm.AddWallet(key, auth)
 			if err != nil {
 				return err
 			}
@@ -66,13 +87,130 @@ func walletsNewCmd() *cobra.Command {
 	bindViperFlag(walletsNewCmd, "node_id", "node-id")
 	walletsNewCmd.MarkFlagRequired("node-id")
 
+	walletsNewCmd.Flags().Bool("mnemonic", true, "Use mnemonic passphrase for wallet encrypting")
+
 	return walletsNewCmd
+}
+
+func walletsUpdateAuthCmd() *cobra.Command {
+	var walletsNewCmd = &cobra.Command{
+		Use:   "update",
+		Short: "Change wallet passphrase",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			wm, err := wallets.NewManager(getBlockchainConfig(cmd))
+			if err != nil {
+				return err
+			}
+			defer wm.Shutdown()
+
+			flagAddr, _ := cmd.Flags().GetString("address")
+			if !common.IsHexAddress(flagAddr) {
+				return fmt.Errorf("invalid address: %s", flagAddr)
+			}
+			addr := common.HexToAddress(flagAddr)
+
+			useMnemonic, _ := cmd.Flags().GetBool("mnemonic")
+
+			var newAuth string
+			auth, err := getPassPhrase("Enter passphrase do decrypt wallet:", true)
+			if err != nil {
+				return err
+			}
+
+			if !useMnemonic {
+				input, err := getPassPhrase("Enter old password:", false)
+				if err != nil {
+					return err
+				}
+
+				if len(input) < 6 {
+					return fmt.Errorf("too weak, min 6 symbols length")
+				}
+
+				newAuth = input
+			} else {
+				// generate a random Mnemonic in English with 256 bits of entropy
+				entropy, _ := bip39.NewEntropy(256)
+				newAuth, _ = bip39.NewMnemonic(entropy)
+
+				logger.Infof("Random Mnemonic passphrase to unlock wallet: \n\n\t%s\n", auth)
+				logger.Warn("Save this passphrase to access your wallet.",
+					"There is no way to recover it, but you can change it")
+			}
+
+			storedKey, err := wm.FindAccountKey(addr)
+			if err != nil {
+				return err
+			}
+
+			key, err := keystore.DecryptKey(storedKey, auth)
+			if err != nil {
+				return err
+			}
+
+			if _, err := wm.AddWallet(key, newAuth); err != nil {
+				return err
+			}
+
+			logger.Infof("Done! Passphrase for account '%s' has changed!", addr.Hex())
+			return nil
+		},
+		TraverseChildren: true,
+	}
+
+	addNodeIdFlag(walletsNewCmd)
+	addAddressFlag(walletsNewCmd)
+	bindViperFlag(walletsNewCmd, "node_id", "node-id")
+	walletsNewCmd.MarkFlagRequired("node-id")
+
+	walletsNewCmd.Flags().Bool("mnemonic", true, "Use mnemonic passphrase for wallet encrypting")
+
+	return walletsNewCmd
+}
+
+func walletsPrintPrivKeyCmd() *cobra.Command {
+	var walletsPrintPrivKeyCmd = &cobra.Command{
+		Use:   "print-pk",
+		Short: "Unlocks keystore file and prints the Private + Public keys.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			address, _ := cmd.Flags().GetString("address")
+			if !common.IsHexAddress(address) {
+				return fmt.Errorf("bad address format")
+			}
+
+			auth, err := getPassPhrase("Enter passphrase do decrypt wallet:", true)
+			if err != nil {
+				return err
+			}
+
+			wm, err := wallets.NewManager(getBlockchainConfig(cmd))
+			if err != nil {
+				return err
+			}
+			defer wm.Shutdown()
+
+			wallet, err := wm.GetWallet(common.HexToAddress(address), auth)
+			if err != nil {
+				logger.Errorf("Unable to get wallet: %s", err)
+				return err
+			}
+
+			return writeOutput(cmd, wallet.Key)
+		},
+		TraverseChildren: true,
+	}
+
+	addOutputFormatFlag(walletsPrintPrivKeyCmd)
+	addAddressFlag(walletsPrintPrivKeyCmd)
+	addNodeIdFlag(walletsPrintPrivKeyCmd)
+
+	return walletsPrintPrivKeyCmd
 }
 
 func walletsListCmd() *cobra.Command {
 	var walletsListCmd = &cobra.Command{
 		Use:   "list",
-		Short: "Lists available wallets.",
+		Short: "Lists available wallet addresses.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts := getBlockchainConfig(cmd)
 			wm, err := wallets.NewManager(opts)
@@ -100,49 +238,21 @@ func walletsListCmd() *cobra.Command {
 	return walletsListCmd
 }
 
-func walletsPrintPrivKeyCmd() *cobra.Command {
-	var walletsPrintPrivKeyCmd = &cobra.Command{
-		Use:   "print-pk",
-		Short: "Unlocks keystore file and prints the Private + Public keys.",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			address, _ := cmd.Flags().GetString("address")
-			if !common.IsHexAddress(address) {
-				return fmt.Errorf("bad address format")
-			}
-
-			auth, err := prompt.Stdin.PromptPassword("Enter password to decrypt the wallet:")
-			if err != nil {
-				return err
-			}
-
-			wm, err := wallets.NewManager(getBlockchainConfig(cmd))
-			if err != nil {
-				return err
-			}
-			defer wm.Shutdown()
-
-			wallet, err := wm.GetWallet(common.HexToAddress(address))
-			if err != nil {
-				return err
-			}
-
-			key, err := keystore.DecryptKey(wallet.Data, auth)
-			if err != nil {
-				fmt.Println(err.Error())
-				os.Exit(1)
-			}
-
-			return writeOutput(cmd, map[string]interface{}{
-				"address": wallet.Address,
-				"key":     key,
-			})
-		},
-		TraverseChildren: true,
+func getPassPhrase(message string, confirmation bool) (string, error) {
+	auth, err := prompt.Stdin.PromptPassword(message)
+	if err != nil {
+		return "", err
 	}
 
-	addOutputFormatFlag(walletsPrintPrivKeyCmd)
-	addAddressFlag(walletsPrintPrivKeyCmd)
-	addNodeIdFlag(walletsPrintPrivKeyCmd)
+	if confirmation {
+		confirm, err := prompt.Stdin.PromptPassword("Repeat password: ")
+		if err != nil {
+			return "", fmt.Errorf("failed to read password confirmation: %v", err)
+		}
+		if auth != confirm {
+			return "", fmt.Errorf("passwords do not match")
+		}
+	}
 
-	return walletsPrintPrivKeyCmd
+	return auth, nil
 }

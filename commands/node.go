@@ -1,8 +1,10 @@
 package commands
 
 import (
+	"github.com/ethereum/go-ethereum/console/prompt"
 	"github.com/rovergulf/rbn/node"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 func init() {
@@ -30,6 +32,17 @@ func nodeRunCmd() *cobra.Command {
 		Short: "Run Rovergulf Blockchain Network peer node",
 		Long:  ``,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			miner := viper.GetString("miner")
+
+			if len(miner) > 0 {
+				auth, err := prompt.Stdin.PromptPassword("Enter passphrase do decrypt miner wallet:")
+				if err != nil {
+					return err
+				}
+
+				viper.Set("auth", auth)
+			}
+
 			n, err := node.New(getBlockchainConfig(cmd))
 			if err != nil {
 				return err
@@ -44,7 +57,8 @@ func nodeRunCmd() *cobra.Command {
 	addNodeIdFlag(nodeRunCmd)
 
 	// node
-	nodeRunCmd.Flags().Bool("miner", false, "Enable miner")
+	nodeRunCmd.Flags().String("miner", "", "Enable miner")
+	bindViperFlag(nodeRunCmd, "miner", "miner")
 
 	nodeRunCmd.Flags().String("net-addr", "127.0.0.1", "Network discovery address")
 	bindViperFlag(nodeRunCmd, "network.addr", "net-addr")

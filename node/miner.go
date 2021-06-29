@@ -18,11 +18,17 @@ type PendingBlock struct {
 	number uint64
 	time   int64
 	miner  common.Address
-	txs    []*core.SignedTx
+	txs    []core.SignedTx
 }
 
-func NewPendingBlock(parent common.Hash, number uint64, miner common.Address, txs []*core.SignedTx) PendingBlock {
-	return PendingBlock{parent, number, time.Now().Unix(), miner, txs}
+func NewPendingBlock(parent common.Hash, number uint64, miner common.Address, txs []core.SignedTx) PendingBlock {
+	return PendingBlock{
+		parent: parent,
+		number: number,
+		time:   time.Now().Unix(),
+		miner:  miner,
+		txs:    txs,
+	}
 }
 
 func Mine(ctx context.Context, pb PendingBlock) (*core.Block, error) {
@@ -36,7 +42,7 @@ func Mine(ctx context.Context, pb PendingBlock) (*core.Block, error) {
 	var hash common.Hash
 	var nonce uint64
 
-	for !IsBlockHashValid(hash) {
+	for !core.IsBlockHashValid(hash) {
 		select {
 		case <-ctx.Done():
 			return nil, fmt.Errorf("context cancelled")
@@ -75,13 +81,6 @@ func generateNonce() uint64 {
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	return rand.Uint64()
-}
-
-func IsBlockHashValid(hash common.Hash) bool {
-	return fmt.Sprintf("%x", hash[0]) == "0" &&
-		fmt.Sprintf("%x", hash[1]) == "0" &&
-		fmt.Sprintf("%x", hash[2]) == "0" &&
-		fmt.Sprintf("%x", hash[3]) != "0"
 }
 
 func Unicode(s string) string {

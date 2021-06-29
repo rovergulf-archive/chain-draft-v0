@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"crypto/tls"
 	"fmt"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/opentracing/opentracing-go"
@@ -110,10 +111,6 @@ func setConfigDefaults() {
 
 	viper.SetDefault("node_id", "")
 
-	// node
-	viper.SetDefault("root", "0x59fc6df01d2e84657faba24dc96e14871192bda4")
-	viper.SetDefault("miner", "0x0000000000000000000000000000000000000000")
-
 	// storage
 	viper.SetDefault("db", "")
 	viper.SetDefault("data_dir", "tmp")
@@ -132,9 +129,10 @@ func setConfigDefaults() {
 	viper.SetDefault("ssl.cert", "")
 	viper.SetDefault("ssl.key", "")
 	viper.SetDefault("ssl.verify", false)
+	viper.SetDefault("ssl.mode", tls.NoClientCert)
 
-	// bootstrap server
-	viper.SetDefault("network.id", 1)                  //
+	// network server
+	viper.SetDefault("network.id", "9420")             //
 	viper.SetDefault("network.host", "127.0.0.1:9420") // swarm.rovergulf.net:443
 
 	// http server
@@ -143,8 +141,9 @@ func setConfigDefaults() {
 	viper.SetDefault("node.sync_interval", 5)
 	viper.SetDefault("node.cache_dir", "")
 
+	viper.SetDefault("http.disabled", false)
 	viper.SetDefault("http.addr", "127.0.0.1")
-	viper.SetDefault("http.port", 9069)
+	viper.SetDefault("http.port", 9469)
 
 	// TBD
 	// Runtime configuration

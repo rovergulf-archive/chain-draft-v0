@@ -2,15 +2,17 @@ package node
 
 import (
 	"context"
+	"encoding/gob"
 	"fmt"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prom2json"
 	"github.com/rovergulf/rbn/core"
-	"github.com/rovergulf/rbn/pkg/response"
 	"github.com/rovergulf/rbn/pkg/version"
+	"github.com/rovergulf/rbn/wallets"
 	"net/http"
 	"strings"
 	"time"
@@ -25,28 +27,21 @@ func (n *Node) serveHttp() error {
 	r.HandleFunc("/routes", n.WalkRoutes).Methods(http.MethodGet)
 
 	r.HandleFunc(endpointStatus, n.NodeStatus).Methods(http.MethodGet)
+	r.HandleFunc(endpointAddPeer, n.AddPeerNode).Methods(http.MethodGet)
+	r.HandleFunc(endpointSync, n.SyncPeers).Methods(http.MethodGet)
 
+	r.HandleFunc("/chain/info", n.healthCheck).Methods(http.MethodGet)
+
+	r.HandleFunc("/genesis", n.ShowGenesis).Methods(http.MethodGet)
+	r.HandleFunc("/blocks", n.ListBlocks).Methods(http.MethodGet)
 	r.HandleFunc("/blocks/latest", n.LatestBlock).Methods(http.MethodGet)
-	r.HandleFunc("/blocks/{hash}", n.FindBlock).Methods(http.MethodGet)
+	r.HandleFunc("/block/{hash}", n.FindBlock).Methods(http.MethodGet)
 	r.HandleFunc("/balances", n.ListBalances).Methods(http.MethodGet)
 	r.HandleFunc("/balances/{addr}", n.GetBalance).Methods(http.MethodGet)
 	r.HandleFunc("/tx/add", n.TxAdd).Methods(http.MethodGet)
+	r.HandleFunc("/tx/find/{hash}", n.healthCheck).Methods(http.MethodGet)
 
 	return http.ListenAndServe(n.metadata.ApiAddress(), &n.httpHandler)
-}
-
-func (n *Node) httpResponse(w http.ResponseWriter, i interface{}, statusCode ...int) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	if len(statusCode) > 0 {
-		w.WriteHeader(statusCode[0])
-	} else {
-		w.WriteHeader(http.StatusOK)
-	}
-
-	if err := response.WriteJSON(w, n.logger, i); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fmt.Sprintf("Unable to write json response: %s", err.Error())))
-	}
 }
 
 func (n *Node) healthCheck(w http.ResponseWriter, r *http.Request) {
@@ -140,16 +135,37 @@ func (n *Node) NodeStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lsm, vlog := n.bc.Db.Size()
-	n.httpResponse(w, StatusRes{
+	lsm, vlog := n.bc.DbSize()
+	wLsm, wVlog := n.wm.DbSize()
+	nLsm, nVlog := n.db.Size()
+	result := StatusRes{
 		LastHash:   lb.Hash.Hex(),
 		Number:     n.bc.ChainLength.Uint64(),
 		KnownPeers: n.knownPeers,
 		PendingTXs: n.pendingTXs,
 		IsMining:   n.isMining,
-		DbSizeLsm:  lsm,
-		DbSizeVlog: vlog,
-	})
+		DbSize: map[string]int64{
+			"chain_lsm":    lsm,
+			"chain_vlog":   vlog,
+			"wallets_lsm":  wLsm,
+			"wallets_vlog": wVlog,
+			"node_lsm":     nLsm,
+			"node_vlog":    nVlog,
+		},
+	}
+
+	n.httpResponse(w, result)
+}
+
+func (n *Node) ShowGenesis(w http.ResponseWriter, r *http.Request) {
+	//ctx := r.Context()
+	gen, err := n.bc.GetGenesis()
+	if err != nil {
+		n.httpResponse(w, true, http.StatusInternalServerError)
+		return
+	}
+
+	n.httpResponse(w, gen)
 }
 
 func (n *Node) AddPeerNode(w http.ResponseWriter, r *http.Request) {
@@ -168,17 +184,13 @@ func (n *Node) ListBalances(w http.ResponseWriter, r *http.Request) {
 	//ctx := r.Context()
 	n.logger.Debug("http server ListBalances called")
 
-	balances := core.Balances{
-		Blockchain: n.bc,
-	}
-
-	list, err := balances.ListBalances()
+	balances, err := n.bc.ListBalances()
 	if err != nil {
 		n.httpResponse(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	n.httpResponse(w, list)
+	n.httpResponse(w, balances)
 }
 
 func (n *Node) GetBalance(w http.ResponseWriter, r *http.Request) {
@@ -191,11 +203,7 @@ func (n *Node) GetBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	balances := core.Balances{
-		Blockchain: n.bc,
-	}
-
-	balance, err := balances.GetBalance(common.HexToAddress(addr))
+	balance, err := n.bc.GetBalance(common.HexToAddress(addr))
 	if err != nil {
 		n.httpResponse(w, err, http.StatusBadRequest)
 		return
@@ -206,8 +214,67 @@ func (n *Node) GetBalance(w http.ResponseWriter, r *http.Request) {
 
 func (n *Node) TxAdd(w http.ResponseWriter, r *http.Request) {
 	//ctx := r.Context()
-	n.logger.Debug("http server TxAdd called")
+	req := TxAddReq{}
+	decoder := gob.NewDecoder(r.Body)
+	if err := decoder.Decode(&req); err != nil {
+		n.httpResponse(w, err, http.StatusBadRequest)
+		return
+	}
+
+	from := common.HexToAddress(req.From)
+
+	if from.String() == common.HexToAddress("").String() {
+		n.httpResponse(w, fmt.Errorf("%s is an invalid 'from' sender", from.String()))
+		return
+	}
+
+	if req.FromPwd == "" {
+		n.httpResponse(w, fmt.Errorf("password to decrypt the '%s' account is required. 'from_pwd' is empty", from.String()), http.StatusInternalServerError)
+		return
+	}
+
+	nonce := n.bc.GetNextAccountNonce(from)
+	tx, err := core.NewTransaction(from, common.HexToAddress(req.To), req.Value, nonce, []byte(req.Data))
+	if err != nil {
+		n.httpResponse(w, err, http.StatusBadRequest)
+		return
+	}
+
+	storedKey, err := n.wm.FindAccountKey(from)
+	if err != nil {
+		n.httpResponse(w, err, http.StatusBadRequest)
+		return
+	}
+
+	key, err := keystore.DecryptKey(storedKey, req.FromPwd)
+	if err != nil {
+		n.httpResponse(w, err, http.StatusBadRequest)
+		return
+	}
+
+	signedTx, err := wallets.NewSignedTx(tx, key.PrivateKey)
+	if err != nil {
+		n.httpResponse(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	if err := n.AddPendingTX(*signedTx, n.metadata); err != nil {
+		n.httpResponse(w, err, http.StatusInternalServerError)
+		return
+	}
+
 	n.httpResponse(w, true, http.StatusNotImplemented)
+}
+
+func (n *Node) ListBlocks(w http.ResponseWriter, r *http.Request) {
+	//ctx := r.Context()
+	blocks, err := n.bc.GetBlockHashes()
+	if err != nil {
+		n.httpResponse(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	n.httpResponse(w, blocks)
 }
 
 func (n *Node) LatestBlock(w http.ResponseWriter, r *http.Request) {

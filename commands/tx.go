@@ -1,12 +1,17 @@
 package commands
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/console/prompt"
 	"github.com/rovergulf/rbn/core"
+	"github.com/rovergulf/rbn/node"
+	"github.com/rovergulf/rbn/rpc"
 	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/cobra"
-	"time"
+	"github.com/spf13/viper"
 )
 
 func init() {
@@ -106,10 +111,14 @@ func txSendCmd() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			mineNow, _ := cmd.Flags().GetBool("miner")
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			//data, _ := cmd.Flags().GetBool("data")
+			//dataFormat, _ := cmd.Flags().GetString("data-format")
 			from, _ := cmd.Flags().GetString("address")
 			to, _ := cmd.Flags().GetString("to")
-			amount, _ := cmd.Flags().GetInt64("amount")
+			amount, _ := cmd.Flags().GetUint64("amount")
 
 			if !common.IsHexAddress(to) {
 				return fmt.Errorf("recipient address is not Valid")
@@ -125,6 +134,11 @@ func txSendCmd() *cobra.Command {
 
 			opts := getBlockchainConfig(cmd)
 
+			auth, err := prompt.Stdin.PromptPassword("Enter old password:")
+			if err != nil {
+				return err
+			}
+
 			bc, err := core.ContinueBlockchain(opts)
 			if err != nil {
 				logger.Error("Unable to start blockchain: %s", err)
@@ -138,42 +152,47 @@ func txSendCmd() *cobra.Command {
 			}
 			defer wm.Shutdown()
 
-			wallet, err := wm.GetWallet(common.HexToAddress(from))
+			fromAddr := common.HexToAddress(from)
+
+			wallet, err := wm.GetWallet(fromAddr, auth)
+			if err != nil {
+				logger.Errorf("Unable to get wallet: %s", err)
+				return err
+			}
+
+			client, err := node.NewClient(ctx, logger, viper.GetString("network.addr"))
+			if err != nil {
+				return err
+			}
+			defer client.Stop()
+
+			addTxReq := node.TxAddReq{
+				From:    from,
+				FromPwd: wallet.GetPassphrase(),
+				To:      to,
+				Value:   amount,
+				Data:    nil,
+			}
+
+			callData, err := json.Marshal(addTxReq)
 			if err != nil {
 				return err
 			}
 
-			tx, err := core.NewTransaction(common.HexToAddress(from), common.HexToAddress(to), amount, 0, nil)
+			res, err := client.RpcCall(ctx, &rpc.CallRequest{
+				Cmd:  rpc.CallRequest_TX_ADD,
+				Data: callData,
+			})
 			if err != nil {
 				return err
 			}
 
-			signedTx, err := wallet.SignTx(tx)
-			if err != nil {
-				return err
-			}
-
-			if mineNow {
-				logger.Debug("Mine block")
-
-				txs := []*core.SignedTx{signedTx}
-				now := time.Now()
-
-				b := core.NewBlock(bc.LastHash, bc.ChainLength.Uint64(), 0, now.Unix(), common.HexToAddress(from), txs)
-				if err := b.SetHash(); err != nil {
-					return err
-				}
-
-				return bc.AddBlock(b)
-			} else {
-				return fmt.Errorf("not implemented")
-				//return node.SendTx(viper.GetString("node_id"), tx)
-			}
+			return writeOutput(cmd, res)
+			//return node.SendTx(viper.GetString("node_id"), tx)
 		},
 		TraverseChildren: true,
 	}
 
-	txSendCmd.Flags().Bool("miner", false, "Mine block")
 	txSendCmd.Flags().String("to", "", "Receiver address")
 	txSendCmd.Flags().Int("amount", 0, "Transaction coin amount")
 	txSendCmd.MarkFlagRequired("to")

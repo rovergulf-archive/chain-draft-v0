@@ -8,8 +8,14 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - Added get block http handler
+- gRPC node connection interface instead custom TCP
+- genproto.sh script to generate rpc command
+- some gRPC handlers
+- change account auth phrase
 
 ### Changed
+- wallets creation use mnemonic passphrase by `--mnemonic` 
+  flag value now, which is true by default.
 
 ### Fixed
 
@@ -30,7 +36,8 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - `Wallets` now are `Manager`
-- `repo` package moved to `database/badgerdb` to prepare multiple database backend interface
+- `repo` package moved to `database/badgerdb` 
+  to prepare multiple database backend interface
   - [Dgraph Go client](https://github.com/dgraph-io/dgo)
 
 
