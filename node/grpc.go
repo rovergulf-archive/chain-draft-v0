@@ -79,20 +79,18 @@ func (n *Node) RpcCall(ctx context.Context, req *rpc.CallRequest) (*rpc.CallResp
 	n.logger.Debugw("RPC Call", "cmd", req.Cmd)
 
 	switch req.Cmd {
-	case rpc.CallRequest_ADD_PEER:
+	case rpc.CallRequest_SYNC_PEERS:
 		return n.handleRpcAddPeer(ctx, req.Data)
-	case rpc.CallRequest_INVITE:
+	case rpc.CallRequest_SYNC_GEN:
 		return nil, fmt.Errorf("not implemented")
-	case rpc.CallRequest_VERSION:
+	case rpc.CallRequest_SYNC_STATE:
 		return nil, fmt.Errorf("not implemented")
-	case rpc.CallRequest_SYNC:
+	case rpc.CallRequest_SYNC_BLOCKS:
 		return nil, fmt.Errorf("not implemented")
-	case rpc.CallRequest_BLOCK_ADD:
-		return n.handleRpcAddBlock(ctx, req.Data)
+	//case rpc.CallRequest_BLOCK_ADD:
+	//	return n.handleRpcAddBlock(ctx, req.Data)
 	case rpc.CallRequest_TX_ADD:
 		return n.handleRpcAddTx(ctx, req.Data)
-	case rpc.CallRequest_BLOCK_GET:
-		return n.handleRpcGetBlock(ctx, req.Data)
 	case rpc.CallRequest_TX_GET:
 		return nil, fmt.Errorf("not implemented")
 	default:

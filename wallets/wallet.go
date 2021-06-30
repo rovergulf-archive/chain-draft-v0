@@ -9,6 +9,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
 	"github.com/rovergulf/rbn/core"
@@ -17,6 +18,7 @@ import (
 
 type Wallet struct {
 	Code []byte `json:"code" yaml:"code"`
+	Data []byte `json:"-" yaml:"-"` // stores encrypted key
 	*keystore.Key
 }
 
@@ -51,6 +53,20 @@ func (w *Wallet) SignTx(tx *core.Transaction) (*core.SignedTx, error) {
 
 func (w *Wallet) GetPassphrase() string {
 	return string(w.Code)
+}
+
+func (w *Wallet) Address() common.Address {
+	return w.Key.Address
+}
+
+func (w *Wallet) Open() error {
+	key, err := keystore.DecryptKey(w.Data, w.GetPassphrase())
+	if err != nil {
+		return err
+	}
+
+	w.Key = key
+	return nil
 }
 
 func DeserializeWallet(data []byte) (*Wallet, error) {

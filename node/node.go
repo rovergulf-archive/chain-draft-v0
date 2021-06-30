@@ -20,7 +20,6 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"sync"
@@ -80,15 +79,13 @@ type Node struct {
 func New(opts config.Options) (*Node, error) {
 	nodeAddr := viper.GetString("node.addr")
 	nodePort := viper.GetUint64("node.port")
-	peerNodeAddr := fmt.Sprintf("%s:%d", nodeAddr, nodePort)
 
-	pn := PeerNode{
-		Ip:        nodeAddr,
-		Port:      nodePort,
-		Root:      peerNodeAddr == DefaultNetworkAddr,
-		Account:   common.HexToAddress(opts.Address),
-		connected: false,
+	syncMode := viper.GetString("node.sync")
+	if syncMode == "" {
+		syncMode = string(SyncModeDefault)
 	}
+	mainNode := NewPeerNode(DefaultNodeIP, DefaultNodePort, common.HexToAddress(opts.Address), SyncMode(syncMode))
+	pn := NewPeerNode(nodeAddr, nodePort, common.HexToAddress(opts.Address), SyncMode(syncMode))
 
 	n := &Node{
 		metadata: pn,
@@ -100,7 +97,8 @@ func New(opts config.Options) (*Node, error) {
 		bc:     nil,
 		logger: opts.Logger,
 		knownPeers: map[string]PeerNode{
-			pn.TcpAddress(): pn,
+			mainNode.TcpAddress(): mainNode,
+			pn.TcpAddress():       pn,
 		},
 		pendingTXs:    make(map[string]core.SignedTx),
 		newSyncTXs:    make(chan core.SignedTx),
@@ -129,11 +127,6 @@ func (n *Node) Run() error {
 
 	nodeAddress := fmt.Sprintf("%s:%d", n.metadata.Ip, n.metadata.Port)
 
-	httpApiAddress := fmt.Sprintf("%s:%s",
-		viper.GetString("http.addr"),
-		viper.GetString("http.port"),
-	)
-
 	n.logger.Infow("Starting node...",
 		"addr", nodeAddress, "is_root", n.metadata.Root)
 
@@ -155,9 +148,9 @@ func (n *Node) Run() error {
 	chain, err := core.ContinueBlockchain(n.config)
 	if err != nil {
 		return err
+	} else {
+		n.bc = chain
 	}
-	defer chain.Shutdown()
-	n.bc = chain
 
 	n.wm, err = wallets.NewManager(n.config)
 	if err != nil {
@@ -188,6 +181,10 @@ func (n *Node) Run() error {
 	go n.mine(ctx)
 	go n.sync(ctx)
 
+	httpApiAddress := fmt.Sprintf("%s:%s",
+		viper.GetString("http.addr"),
+		viper.GetString("http.port"),
+	)
 	n.logger.Infow("Listening HTTP", "addr", httpApiAddress)
 	return n.serveHttp()
 }
@@ -258,54 +255,6 @@ func (n *Node) Shutdown() {
 func (n *Node) IsKnownPeer(peer PeerNode) bool {
 	_, ok := n.knownPeers[peer.Account.Hex()]
 	return ok
-}
-
-func (n *Node) HandleConnection(conn net.Conn) error {
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	defer conn.Close()
-
-	req, err := ioutil.ReadAll(conn)
-	if err != nil {
-		return err
-	}
-
-	command := BytesToCmd(req[:12])
-
-	if n.tracer != nil {
-		span := n.tracer.StartSpan("node_rpc_conn")
-		span.SetTag("cmd", command)
-		ctx = opentracing.ContextWithSpan(ctx, span)
-	}
-
-	n.logger.Debugf("Received [%s] command", command)
-
-	switch command {
-	case "sync":
-		return nil
-		//return HandleAddr(req)
-	case "block":
-		return nil
-		//return HandleBlock(req, chain)
-	case "inv":
-		return nil
-		//return HandleInv(req, chain)
-	case "getblocks":
-		return nil
-		//return HandleGetBlocks(req, chain)
-	case "getdata":
-		return nil
-		//return HandleGetData(req, chain)
-	case "tx":
-		return nil
-		//return HandleTx(req, chain)
-	case "version":
-		return nil
-		//return HandleVersion(req, chain)
-	default:
-		return fmt.Errorf("unknown command")
-	}
 }
 
 func CmdToBytes(cmd string) []byte {

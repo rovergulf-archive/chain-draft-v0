@@ -6,13 +6,13 @@
   "difficulty": 400,
   "gas_limit": 2100000,
   "alloc": {
-    "0xC777Cc593a3C45fb6038De239BADE30eFB6821a3": {
+    "0xdc041a7aa9cda8026db25cc0dbedcd9eeeeab6b0": {
       "balance": 1000
     },
-    "0x19c289D74b4ef97af0B30206324CfC954dE17b0f": {
+    "0xfee511c80400c62c13e89118250356be0bb1ba71": {
       "balance": 1000
     },
-    "0x412F094e3D1565b9fb97203f677138b5dA740591": {
+    "0xdF05259BdA87f5F827d6f63a96Cdac336444B80a": {
       "balance": 1000
     }
   },

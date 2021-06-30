@@ -134,7 +134,7 @@ func txSendCmd() *cobra.Command {
 
 			opts := getBlockchainConfig(cmd)
 
-			auth, err := prompt.Stdin.PromptPassword("Enter old password:")
+			auth, err := prompt.Stdin.PromptPassword("Enter passphrase to decrypt wallet:")
 			if err != nil {
 				return err
 			}

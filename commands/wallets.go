@@ -77,7 +77,7 @@ func walletsNewCmd() *cobra.Command {
 				return err
 			}
 
-			logger.Infof("Done! Wallet address: \n\t%s", wallet.Address)
+			logger.Infof("Done! Wallet address: \n\n\t%s\n", wallet.Address())
 			return nil
 		},
 		TraverseChildren: true,
@@ -247,10 +247,11 @@ func getPassPhrase(message string, confirmation bool) (string, error) {
 	if confirmation {
 		confirm, err := prompt.Stdin.PromptPassword("Repeat password: ")
 		if err != nil {
-			return "", fmt.Errorf("failed to read password confirmation: %v", err)
+			return "", fmt.Errorf("failed to read passphrase confirmation: %v", err)
 		}
+
 		if auth != confirm {
-			return "", fmt.Errorf("passwords do not match")
+			return "", fmt.Errorf("passphrases do not match")
 		}
 	}
 

@@ -5,7 +5,6 @@ import (
 	"crypto/elliptic"
 	"crypto/sha256"
 	"encoding/gob"
-	"encoding/json"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -68,20 +67,6 @@ func (tx Transaction) Serialize() ([]byte, error) {
 func (tx *Transaction) Deserialize(data []byte) error {
 	decoder := gob.NewDecoder(bytes.NewReader(data))
 	return decoder.Decode(tx)
-}
-
-func (tx Transaction) MarshalJSON() ([]byte, error) {
-	var res bytes.Buffer
-	encoder := json.NewEncoder(&res)
-	if err := encoder.Encode(tx); err != nil {
-		return nil, err
-	}
-
-	return res.Bytes(), nil
-}
-
-func (tx *Transaction) UnmarshalJSON(data []byte) error {
-	return json.Unmarshal(data, tx)
 }
 
 // NewTransaction creates a new transaction

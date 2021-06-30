@@ -23,6 +23,10 @@ const (
 	GenesisKey     = "g"
 )
 
+var (
+	ErrChainNotExists = fmt.Errorf("chain db does not exists")
+)
+
 func dbExists(filePath string) bool {
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return false
@@ -116,6 +120,11 @@ func InitBlockchain(opts config.Options) (*Blockchain, error) {
 			return err
 		}
 
+		if err := txn.Set([]byte("rh"), genesis.Hash.Bytes()); err != nil {
+			opts.Logger.Errorf("Unable to put genesis block hash: %s", err)
+			return err
+		}
+
 		if err := txn.Set([]byte("lh"), genesis.Hash.Bytes()); err != nil {
 			opts.Logger.Errorf("Unable to put genesis block hash: %s", err)
 			return err
@@ -151,10 +160,6 @@ func InitBlockchain(opts config.Options) (*Blockchain, error) {
 
 // ContinueBlockchain continues from existing database Blockchain
 func ContinueBlockchain(opts config.Options) (*Blockchain, error) {
-	if !dbExists(opts.DbFilePath) {
-		return nil, fmt.Errorf("chain db does not exists")
-	}
-
 	b := Blockchain{
 		Balances:    make(map[common.Address]Balance),
 		ChainLength: big.NewInt(0),
@@ -173,6 +178,10 @@ func ContinueBlockchain(opts config.Options) (*Blockchain, error) {
 	if err := db.View(func(txn *badger.Txn) error {
 		lh, err := txn.Get([]byte("lh"))
 		if err != nil {
+			// is it ok??
+			if err == badger.ErrKeyNotFound {
+				return nil
+			}
 			return err
 		}
 
@@ -254,40 +263,6 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 			})
 		})
 	})
-}
-
-func (bc *Blockchain) GetBestHeight() (uint64, error) {
-	var lastBlockHeight uint64
-
-	if err := bc.db.View(func(txn *badger.Txn) error {
-		lastHash, err := txn.Get([]byte("lh"))
-		if err != nil {
-			bc.logger.Errorf("Unable to get last hash value: %s", err)
-			return err
-		}
-
-		return lastHash.Value(func(val []byte) error {
-			lastBlockData, err := txn.Get(val)
-			if err != nil {
-				return err
-			}
-
-			return lastBlockData.Value(func(val []byte) error {
-				lb, err := DeserializeBlock(val)
-				if err != nil {
-					return err
-				}
-
-				lastBlockHeight = lb.Number
-
-				return nil
-			})
-		})
-	}); err != nil {
-		return 0, err
-	}
-
-	return lastBlockHeight, nil
 }
 
 func (bc *Blockchain) GetBlock(hash common.Hash) (Block, error) {
@@ -399,10 +374,10 @@ func (bc *Blockchain) ApplyTx(txHash common.Hash, tx SignedTx) error {
 			return fmt.Errorf("invalid transaction")
 		}
 
-		fromAddr.Balance = -uint64(tx.Value)
-		toAddr.Balance = +uint64(tx.Value)
+		fromAddr.Balance -= tx.Cost()
+		toAddr.Balance += tx.Value
 
-		fromAddr.Nonce = +tx.Nonce
+		fromAddr.Nonce = tx.Nonce
 
 		return txn.Set(txHash.Bytes(), encodedTx)
 	})

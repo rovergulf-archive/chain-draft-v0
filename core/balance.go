@@ -12,10 +12,10 @@ var (
 )
 
 type Balance struct {
-	Address    common.Address `json:"address" yaml:"address"`
-	Balance    uint64         `json:"balance" yaml:"balance"`
-	Nonce      uint64         `json:"nonce" yaml:"nonce"`
-	PrivateKey []byte         `json:"-" yaml:"-"`
+	Address common.Address `json:"address" yaml:"address"`
+	Balance uint64         `json:"balance" yaml:"balance"`
+	Nonce   uint64         `json:"nonce" yaml:"nonce"`
+	Units   string         `json:"units" yaml:"units"`
 }
 
 func (b *Balance) Serialize() ([]byte, error) {

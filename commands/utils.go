@@ -36,7 +36,7 @@ func getNodeDbFilePath() string {
 func getBlockchainConfig(cmd *cobra.Command) config.Options {
 	address := viper.GetString("address")
 	nodeId := viper.GetString("node_id")
-	minerAuth := viper.GetString("miner_auth")
+	minerAuth := viper.GetString("auth")
 
 	if len(nodeId) == 0 {
 		nodeId, _ = cmd.Flags().GetString("node-id")
@@ -50,7 +50,7 @@ func getBlockchainConfig(cmd *cobra.Command) config.Options {
 
 	if len(minerAuth) == 0 {
 		minerAuth, _ = cmd.Flags().GetString("auth")
-		viper.Set("miner_auth", minerAuth)
+		viper.Set("auth", minerAuth)
 	}
 
 	opts := config.Options{

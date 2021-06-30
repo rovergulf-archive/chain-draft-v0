@@ -16,25 +16,43 @@ var (
 
 type knownPeers map[string]PeerNode
 
+type SyncMode string
+
+func (sm SyncMode) String() string {
+	return string(sm)
+}
+
+const (
+	SyncModeDefault SyncMode = "default" // only block headers
+	SyncModeAccount SyncMode = "account" // download node account related transactions and blocks
+	SyncModeFull    SyncMode = "full"    // sync full chain
+)
+
 // PeerNode represents distributed node network metadata
 type PeerNode struct {
-	Ip      string         `json:"ip" yaml:"ip"`
-	Port    uint64         `json:"port" yaml:"port"`
-	Root    bool           `json:"root" yaml:"root"`
-	Account common.Address `json:"account" yaml:"account"`
+	Ip       string         `json:"ip" yaml:"ip"`
+	Port     uint64         `json:"port" yaml:"port"`
+	Root     bool           `json:"root" yaml:"root"`
+	Account  common.Address `json:"account" yaml:"account"`
+	syncMode SyncMode
 
 	// Whenever my node already established connection, sync with this Peer
 	connected bool
+	client    *Client
 }
 
-func NewPeerNode(ip string, port uint64, isMain bool, address common.Address, connected bool) PeerNode {
+func NewPeerNode(ip string, port uint64, address common.Address, mode SyncMode) PeerNode {
 	return PeerNode{
-		Ip:        ip,
-		Port:      port,
-		Root:      isMain,
-		Account:   address,
-		connected: connected,
+		Ip:       ip,
+		Port:     port,
+		Root:     ip == DefaultNodeIP && port == DefaultNodePort,
+		Account:  address,
+		syncMode: mode,
 	}
+}
+
+func (pn *PeerNode) SyncMode() string {
+	return pn.syncMode.String()
 }
 
 // TcpAddress returns tcp node address
@@ -70,7 +88,7 @@ func (pn *PeerNode) GetId() []byte {
 	return hash[:]
 }
 
-// addPeer adds new peer to in-memory map
+// addPeer saves new peer to node storage
 func (n *Node) addPeer(peer PeerNode) error {
 	n.logger.Info("n.addPeer", peer)
 
@@ -89,6 +107,7 @@ func (n *Node) addPeer(peer PeerNode) error {
 	})
 }
 
+// removePeer deletes peer from node storage
 func (n *Node) removePeer(peer PeerNode) error {
 	return n.db.Update(func(txn *badger.Txn) error {
 		if err := txn.Delete(peer.GetId()); err != nil {

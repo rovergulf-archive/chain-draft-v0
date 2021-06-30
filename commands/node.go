@@ -5,6 +5,9 @@ import (
 	"github.com/rovergulf/rbn/node"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"io/ioutil"
+	"os"
+	"strconv"
 )
 
 func init() {
@@ -22,6 +25,7 @@ func nodeCmd() *cobra.Command {
 	}
 
 	nodeCmd.AddCommand(nodeRunCmd())
+	nodeCmd.AddCommand(nodeStopCmd())
 
 	return nodeCmd
 }
@@ -32,9 +36,9 @@ func nodeRunCmd() *cobra.Command {
 		Short: "Run Rovergulf Blockchain Network peer node",
 		Long:  ``,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			miner := viper.GetString("miner")
+			addr, _ := cmd.Flags().GetString("address")
 
-			if len(miner) > 0 {
+			if len(addr) > 0 {
 				auth, err := prompt.Stdin.PromptPassword("Enter passphrase do decrypt miner wallet:")
 				if err != nil {
 					return err
@@ -57,18 +61,60 @@ func nodeRunCmd() *cobra.Command {
 	addNodeIdFlag(nodeRunCmd)
 
 	// node
-	nodeRunCmd.Flags().String("miner", "", "Enable miner")
-	bindViperFlag(nodeRunCmd, "miner", "miner")
+	nodeRunCmd.Flags().String("miner", "", "Specify miner account")
 
-	nodeRunCmd.Flags().String("net-addr", "127.0.0.1", "Network discovery address")
+	nodeRunCmd.Flags().String("net-addr", "127.0.0.1:9420", "Network discovery address")
 	bindViperFlag(nodeRunCmd, "network.addr", "net-addr")
-	nodeRunCmd.Flags().Int("net-port", 9420, "Network connection port")
-	bindViperFlag(nodeRunCmd, "network.port", "net-port")
 
 	nodeRunCmd.Flags().String("node-addr", "127.0.0.1", "Node address would listen to")
 	bindViperFlag(nodeRunCmd, "node.addr", "node-addr")
-	nodeRunCmd.Flags().Int("node-port", 9069, "Node port would listen to")
+	nodeRunCmd.Flags().Int("node-port", 9420, "Node port would listen to")
 	bindViperFlag(nodeRunCmd, "node.port", "node-port")
+	nodeRunCmd.Flags().String("http-addr", "127.0.0.1", "Node address would listen to")
+	bindViperFlag(nodeRunCmd, "http.addr", "http-addr")
+	nodeRunCmd.Flags().Int("http-port", 9469, "Node port would listen to")
+	bindViperFlag(nodeRunCmd, "http.port", "http-port")
 
 	return nodeRunCmd
+}
+
+func nodeStopCmd() *cobra.Command {
+	var nodeStopCmd = &cobra.Command{
+		Use:   "stop",
+		Short: "Stops running node using saved process id",
+		Long:  ``,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pidValue, err := ioutil.ReadFile(viper.GetString("pid_file"))
+			if err != nil {
+				if err == os.ErrNotExist {
+					logger.Info("Daemon not started")
+					return nil
+				}
+				return err
+			}
+
+			pid, err := strconv.Atoi(string(pidValue))
+			if err != nil {
+				return err
+			}
+
+			p, err := os.FindProcess(pid)
+			if err != nil {
+				return err
+			}
+
+			if err := p.Signal(os.Interrupt); err != nil {
+				logger.Errorf("Unable to stop daemon: %s", err)
+				return err
+			} else {
+				logger.Info("Successfully stopped daemon")
+				return os.Remove(viper.GetString("pid_file"))
+			}
+		},
+		TraverseChildren: true,
+	}
+
+	addNodeIdFlag(nodeStopCmd)
+
+	return nodeStopCmd
 }

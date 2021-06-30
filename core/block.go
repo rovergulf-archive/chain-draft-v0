@@ -14,26 +14,33 @@ var (
 	blocksPrefixLength = len(blocksPrefix)
 )
 
+type BlockHeader struct {
+	PrevHash   common.Hash    `json:"prev_hash" yaml:"prev_hash"`
+	Hash       common.Hash    `json:"hash" yaml:"hash"`
+	Root       common.Hash    `json:"root" yaml:"root"`
+	Number     uint64         `json:"number" yaml:"number"`
+	Nonce      uint64         `json:"nonce" yaml:"nonce"`
+	Difficulty uint64         `json:"difficulty" yaml:"difficulty"`
+	Timestamp  int64          `json:"timestamp" yaml:"timestamp"`
+	Miner      common.Address `json:"miner" yaml:"miner"`
+}
+
 // Block represents
 type Block struct {
-	PrevHash     common.Hash    `json:"prev_hash" yaml:"prev_hash"`
-	Hash         common.Hash    `json:"hash" yaml:"hash"`
-	Number       uint64         `json:"number" yaml:"number"`
-	Nonce        uint64         `json:"nonce" yaml:"nonce"`
-	Difficulty   uint64         `json:"difficulty" yaml:"difficulty"`
-	Timestamp    int64          `json:"timestamp" yaml:"timestamp"`
-	Miner        common.Address `json:"miner" yaml:"miner"`
-	Transactions []SignedTx     `json:"transactions" yaml:"transactions"`
+	BlockHeader
+	Transactions []SignedTx `json:"transactions" yaml:"transactions"`
 }
 
 // NewBlock creates and returns Block
 func NewBlock(prev common.Hash, number uint64, nonce uint64, time int64, miner common.Address, txs []SignedTx) *Block {
 	return &Block{
-		PrevHash:     prev,
-		Number:       number,
-		Nonce:        nonce,
-		Timestamp:    time,
-		Miner:        miner,
+		BlockHeader: BlockHeader{
+			PrevHash:  prev,
+			Number:    number,
+			Nonce:     nonce,
+			Timestamp: time,
+			Miner:     miner,
+		},
 		Transactions: txs,
 	}
 }

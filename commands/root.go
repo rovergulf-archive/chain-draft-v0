@@ -4,15 +4,10 @@ import (
 	"crypto/tls"
 	"fmt"
 	homedir "github.com/mitchellh/go-homedir"
-	"github.com/opentracing/opentracing-go"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/uber/jaeger-client-go"
-	"github.com/uber/jaeger-client-go/config"
-	"github.com/uber/jaeger-lib/metrics/prometheus"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"io"
 	"log"
 	"os"
 )
@@ -59,11 +54,13 @@ func init() {
 	rootCmd.PersistentFlags().Bool("log_json", false, "Enable JSON formatted logs output")
 	rootCmd.PersistentFlags().Int("log_level", int(zapcore.DebugLevel), "Log level")
 	rootCmd.PersistentFlags().Bool("log_stacktrace", false, "Log stacktrace verbose")
+	rootCmd.PersistentFlags().Bool("dev", false, "Enable development/testing environment")
 
 	// main flags
 	rootCmd.PersistentFlags().StringVar(&dataDir, "data_dir", os.Getenv("DATA_DIR"), "Blockchain data directory")
 
 	// bind viper values
+	bindViperPersistentFlag(rootCmd, "app.dev", "dev")
 	bindViperPersistentFlag(rootCmd, "log_json", "log_json")
 	bindViperPersistentFlag(rootCmd, "log_level", "log_level")
 	bindViperPersistentFlag(rootCmd, "log_stacktrace", "log_stacktrace")
@@ -112,6 +109,7 @@ func setConfigDefaults() {
 	viper.SetDefault("node_id", "")
 
 	// storage
+	viper.SetDefault("pid_file", "/var/run/rbn/pidfile")
 	viper.SetDefault("db", "")
 	viper.SetDefault("data_dir", "tmp")
 	viper.SetDefault("backup_dir", backupsDir)
@@ -131,9 +129,10 @@ func setConfigDefaults() {
 	viper.SetDefault("ssl.verify", false)
 	viper.SetDefault("ssl.mode", tls.NoClientCert)
 
-	// network server
-	viper.SetDefault("network.id", "9420")             //
-	viper.SetDefault("network.host", "127.0.0.1:9420") // swarm.rovergulf.net:443
+	// chain network setup
+	viper.SetDefault("network.id", "9420")
+	viper.SetDefault("network.addr", "127.0.0.1:9420")
+	viper.SetDefault("network.discovery", "swarm.rovergulf.net:443")
 
 	// http server
 	viper.SetDefault("node.addr", "127.0.0.1")
@@ -146,6 +145,10 @@ func setConfigDefaults() {
 	viper.SetDefault("http.port", 9469)
 
 	// TBD
+	// Cache
+	//viper.SetDefault("cache.enabled", false)
+	//viper.SetDefault("cache.size", 256 << 20) // 256mb
+
 	// Runtime configuration
 	//viper.SetDefault("runtime.max_cpu", runtime.NumCPU()) // take 2/3 available by default
 	//viper.SetDefault("runtime.max_mem", getAvailableOSMemory()) // same as above
@@ -177,32 +180,4 @@ func initZapLogger() {
 
 	logger = l.Sugar()
 	viper.Set("logger", logger)
-}
-
-func initOpentracing(address string) (opentracing.Tracer, io.Closer, error) {
-	metrics := prometheus.New()
-
-	traceTransport, err := jaeger.NewUDPTransport(address, 0)
-	if err != nil {
-		logger.Errorf("Unable to setup tracing agent connection: %s", err)
-		return nil, nil, err
-	}
-
-	tracer, closer, err := config.Configuration{
-		ServiceName: "rbn",
-	}.NewTracer(
-		config.Sampler(jaeger.NewConstSampler(true)),
-		config.Reporter(jaeger.NewRemoteReporter(
-			traceTransport,
-			jaeger.ReporterOptions.Logger(jaeger.StdLogger)),
-		),
-		config.Metrics(metrics),
-	)
-	if err != nil {
-		logger.Errorf("Unable to start tracer: %s", err)
-		return nil, nil, err
-	}
-
-	logger.Debugw("Jaeger tracing client initialized", "collector_url", address)
-	return tracer, closer, nil
 }

@@ -33,8 +33,9 @@ func NewClient(ctx context.Context, lg *zap.SugaredLogger, addr string) (*Client
 	}
 
 	return &Client{
-		conn: conn,
-		lg:   lg,
+		conn:              conn,
+		lg:                lg,
+		NodeServiceClient: c,
 	}, nil
 }
 

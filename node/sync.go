@@ -12,7 +12,7 @@ import (
 )
 
 func (n *Node) sync(ctx context.Context) error {
-	n.doSync()
+	n.doSync(ctx)
 
 	syncTimerDuration := viper.GetDuration("node.sync_interval")
 	ticker := time.NewTicker(syncTimerDuration * time.Second)
@@ -20,15 +20,14 @@ func (n *Node) sync(ctx context.Context) error {
 	for {
 		select {
 		case <-ticker.C:
-			n.doSync()
-
+			n.doSync(ctx)
 		case <-ctx.Done():
 			ticker.Stop()
 		}
 	}
 }
 
-func (n *Node) doSync() {
+func (n *Node) doSync(ctx context.Context) {
 	for _, peer := range n.knownPeers {
 		if n.metadata.Ip == peer.Ip && n.metadata.Port == peer.Port {
 			continue
@@ -40,32 +39,20 @@ func (n *Node) doSync() {
 
 		n.logger.Infof("Searching for new Peers and their Blocks and Peers: '%s'", peer.TcpAddress())
 
-		status, err := queryPeerStatus(peer)
-		if err != nil {
-			n.logger.Error(err)
-			n.logger.Infof("Peer '%s' was removed from KnownPeers", peer.TcpAddress())
-
-			if err := n.removePeer(peer); err != nil {
-				n.logger.Errorf("Unable to remove peer: %s", err)
-			}
-
+		if err := n.joinKnownPeer(peer); err != nil {
+			n.logger.Error("Unable to join known peer: ", err)
 			continue
 		}
 
-		if err := n.joinKnownPeers(peer); err != nil {
-			n.logger.Error(err)
-			continue
-		}
+		//if err := n.syncBlocks(peer); err != nil {
+		//	n.logger.Error("Unable to sync blocks: ", err)
+		//	continue
+		//}
 
-		if err = n.syncBlocks(peer, status); err != nil {
-			n.logger.Error(err)
-			continue
-		}
-
-		if err := n.syncKnownPeers(status); err != nil {
-			n.logger.Error(err)
-			continue
-		}
+		//if err := n.syncKnownPeers(); err != nil {
+		//	n.logger.Error("Unable to sync knonw peers", err)
+		//	continue
+		//}
 
 		//if err := n.syncPendingTXs(peer, status.PendingTXs); err != nil {
 		//	n.logger.Error(err)
@@ -75,7 +62,7 @@ func (n *Node) doSync() {
 }
 
 func (n *Node) syncBlocks(peer PeerNode, status *StatusRes) error {
-	localBlockNumber, err := n.bc.GetBestHeight()
+	localBlockNumber := n.bc.ChainLength.Uint64()
 
 	// If the peer has no blocks, ignore it
 	if status.LastHash == "" {
@@ -140,7 +127,7 @@ func (n *Node) syncKnownPeers(status *StatusRes) error {
 //	return nil
 //}
 
-func (n *Node) joinKnownPeers(peer PeerNode) error {
+func (n *Node) joinKnownPeer(peer PeerNode) error {
 	if peer.connected {
 		return nil
 	}
@@ -183,26 +170,6 @@ func (n *Node) joinKnownPeers(peer PeerNode) error {
 	}
 
 	return nil
-}
-
-func queryPeerStatus(peer PeerNode) (*StatusRes, error) {
-	url := fmt.Sprintf("%s://%s%s", peer.ApiProtocol(), peer.TcpAddress(), endpointStatus)
-	res, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf(res.Status)
-	}
-
-	var statusRes StatusRes
-	decoder := json.NewDecoder(res.Body)
-	if err := decoder.Decode(&statusRes); err != nil {
-		return nil, err
-	}
-
-	return &statusRes, nil
 }
 
 func (n *Node) fetchBlocksFromPeer(peer PeerNode, fromBlock common.Hash) ([]*core.Block, error) {

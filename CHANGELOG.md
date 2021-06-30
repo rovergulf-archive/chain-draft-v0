@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
+## 30 Jun 2021
+
+### Added
+- node stop CLI command
+
+### Changed
+- get account key handler
+- sign transactions with open wallet
+
+### Fixed
+- Genesis db encoding - removed `Transaction.MarshalJSON` method
+
+### Removed
+
+
 ## 29 Jun 2021
 
 ### Added
@@ -16,10 +31,6 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - wallets creation use mnemonic passphrase by `--mnemonic` 
   flag value now, which is true by default.
-
-### Fixed
-
-### Removed
 
 
 ## 28 Jun 2021

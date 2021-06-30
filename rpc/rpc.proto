@@ -8,7 +8,7 @@ service NodeService {
   rpc RpcCall(CallRequest) returns (CallResponse);
 }
 
-// this is standard definition from: https://github.com/grpc/grpc/blob/v1.15.0/doc/health-checking.md
+// this is standard definition from: https://github.com/grpc/grpc/blob/v1.39.x/doc/health-checking.md
 message HealthCheckRequest {
   string service = 1;
 }
@@ -24,13 +24,11 @@ message HealthCheckResponse {
 
 message CallRequest {
   enum Command {
-    EMPTY = 0;
-    ADD_PEER = 1;
-    INVITE = 2;
-    VERSION = 3;
-    SYNC = 4;
-    BLOCK_ADD = 5;
-    BLOCK_GET = 6;
+    NIL = 0;
+    SYNC_PEERS = 1;
+    SYNC_GEN = 2;
+    SYNC_STATE = 3;
+    SYNC_BLOCKS = 4;
     TX_ADD = 7;
     TX_GET = 8;
   }
