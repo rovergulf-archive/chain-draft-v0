@@ -39,12 +39,13 @@ const (
 	endpointSync    = "/node/sync"
 	endpointAddPeer = "/node/peer"
 
-	CoinbaseAccount = "0x5793f98ea0911e12742c785c316903b50b0ddaca"
+	CoinbaseAccount = "0xf276db9ddd4b7bE9aDA96D0489bA5d6106c7eFad"
 )
 
 // Node represents blockchain network peer node
 type Node struct {
 	metadata PeerNode
+	account  *wallets.Wallet
 
 	config params.Options
 
@@ -119,14 +120,7 @@ func New(opts params.Options) (*Node, error) {
 	return n, nil
 }
 
-func (n *Node) Run() error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	nodeAddress := fmt.Sprintf("%s:%d", n.metadata.Ip, n.metadata.Port)
-
-	n.logger.Infow("Starting node...",
-		"addr", nodeAddress, "is_root", n.metadata.Root)
+func (n *Node) Init() error {
 
 	exit.ListenExit(func(signal os.Signal) {
 		n.logger.Warnf("Signal [%s] received. Graceful shutdown", signal)
@@ -145,6 +139,7 @@ func (n *Node) Run() error {
 
 	chain, err := core.ContinueBlockchain(n.config)
 	if err != nil {
+		n.logger.Errorf("Unable to continue blockchain: %s", err)
 		return err
 	} else {
 		n.bc = chain
@@ -152,15 +147,23 @@ func (n *Node) Run() error {
 
 	n.wm, err = wallets.NewManager(n.config)
 	if err != nil {
+		n.logger.Errorf("Unable to init wallets manager: %s", err)
 		return err
 	}
 
-	n.logger.Debugf("Miner: %s", n.metadata.Account.Hex())
-
-	if !n.metadata.Root {
-	} else {
+	if err := n.setupNodeAccount(); err != nil {
+		n.logger.Errorf("Unable to setup node account")
+		return err
 	}
+	n.logger.Debugf("Node account: %s", n.account.Address())
 
+	return nil
+}
+
+func (n *Node) Run(ctx context.Context) error {
+	nodeAddress := fmt.Sprintf("%s:%d", n.metadata.Ip, n.metadata.Port)
+	n.logger.Infow("Starting node...",
+		"addr", nodeAddress, "is_root", n.metadata.Root)
 	go func() {
 		n.logger.Debugw("Listening gRPC", "addr", nodeAddress)
 		grpcSrv, err := n.PrepareGrpcServer()
@@ -299,6 +302,47 @@ func (n *Node) collectNetInterfaces() error {
 		}
 	}
 
+	return nil
+}
+
+func (n *Node) setupNodeAccount() error {
+	providedAddr := viper.GetString("address")
+	providedAuth := viper.GetString("auth")
+	if len(providedAddr) > 0 && len(providedAuth) > 0 {
+		w, err := n.wm.GetWallet(common.HexToAddress(providedAddr), providedAuth)
+		if err != nil {
+			return err
+		} else {
+			n.account = w
+		}
+		return n.SaveNodeAccount(w)
+	}
+
+	w, err := n.GetNodeAccount()
+	if err != nil {
+		if err == badger.ErrKeyNotFound {
+			passphrase, err := wallets.GetRandomMnemonic()
+			if err != nil {
+				return err
+			}
+			key, err := wallets.NewRandomKey()
+			if err != nil {
+				return err
+			}
+			newWallet, err := n.wm.AddWallet(key, passphrase)
+			if err != nil {
+				return err
+			}
+
+			if err := n.SaveNodeAccount(newWallet); err != nil {
+				return err
+			}
+			w = newWallet
+		}
+		return err
+	}
+
+	n.account = w
 	return nil
 }
 

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"github.com/ethereum/go-ethereum/console/prompt"
 	"github.com/rovergulf/rbn/node"
 	"github.com/spf13/cobra"
@@ -36,6 +37,9 @@ func nodeRunCmd() *cobra.Command {
 		Short: "Run Rovergulf Blockchain Network peer node",
 		Long:  ``,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
 			addr, _ := cmd.Flags().GetString("address")
 
 			if len(addr) > 0 {
@@ -52,13 +56,18 @@ func nodeRunCmd() *cobra.Command {
 				return err
 			}
 
-			return n.Run()
+			if err := n.Init(); err != nil {
+				return err
+			}
+
+			return n.Run(ctx)
 		},
 		TraverseChildren: true,
 	}
 
-	addAddressFlag(nodeRunCmd)
 	addNodeIdFlag(nodeRunCmd)
+
+	nodeRunCmd.Flags().StringP("address", "a", "", "Node account address")
 
 	// node
 	nodeRunCmd.Flags().String("miner", "", "Specify miner account")
@@ -117,4 +126,18 @@ func nodeStopCmd() *cobra.Command {
 	addNodeIdFlag(nodeStopCmd)
 
 	return nodeStopCmd
+}
+
+func nodeAccountDumpCmd() *cobra.Command {
+	nodeAccountCmd := &cobra.Command{
+		Use:   "account-dump",
+		Short: "Export account key",
+		Long:  ``,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return nil
+		},
+		TraverseChildren: true,
+	}
+
+	return nodeAccountCmd
 }

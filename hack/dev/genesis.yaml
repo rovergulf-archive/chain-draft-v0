@@ -4,14 +4,13 @@ symbol: "TBB"
 
 gasLimit: 2100000
 
-coinbase: "0x5793f98ea0911e12742c785c316903b50b0ddaca"
+coinbase: "0xf276db9ddd4b7bE9aDA96D0489bA5d6106c7eFad"
 alloc:
-  0xdc041a7aa9cda8026db25cc0dbedcd9eeeeab6b0:
+  0x665276E8342dDc697bF12273784E0F3cb778430E:
     balance: 1000
-    auth:
-  0xfee511c80400c62c13e89118250356be0bb1ba71:
+  0x4DaFdc476F67CEFe0B5A222e0484e66664203941:
     balance: 1000
-  0xdF05259BdA87f5F827d6f63a96Cdac336444B80a:
+  0x9498EEb433Fb05E22759be784FE6C2f9e08402f6:
     balance: 1000
 
 config:

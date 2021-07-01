@@ -36,7 +36,6 @@ func getNodeDbFilePath() string {
 func getBlockchainConfig(cmd *cobra.Command) params.Options {
 	address := viper.GetString("address")
 	nodeId := viper.GetString("node_id")
-	minerAuth := viper.GetString("auth")
 
 	if len(nodeId) == 0 {
 		nodeId, _ = cmd.Flags().GetString("node-id")
@@ -46,11 +45,6 @@ func getBlockchainConfig(cmd *cobra.Command) params.Options {
 	if len(address) == 0 {
 		address, _ = cmd.Flags().GetString("address")
 		viper.Set("address", address)
-	}
-
-	if len(minerAuth) == 0 {
-		minerAuth, _ = cmd.Flags().GetString("auth")
-		viper.Set("auth", minerAuth)
 	}
 
 	opts := params.Options{
@@ -92,7 +86,7 @@ func addOutputFormatFlag(cmd *cobra.Command) {
 }
 
 func addAddressFlag(cmd *cobra.Command) {
-	cmd.Flags().StringP("address", "a", "", "Blockchain address")
+	cmd.Flags().StringP("address", "a", "", "Account address")
 	cmd.MarkFlagRequired("address")
 	bindViperFlag(cmd, "address", "address")
 }

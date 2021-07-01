@@ -190,15 +190,7 @@ func ContinueBlockchain(opts params.Options) (*Blockchain, error) {
 		return lh.Value(func(val []byte) error {
 			b.LastHash = common.BytesToHash(val)
 
-			chainLength, err := txn.Get([]byte("cl"))
-			if err != nil {
-				return err
-			}
-
-			return chainLength.Value(func(val []byte) error {
-				b.ChainLength.SetBytes(val)
-				return nil
-			})
+			return nil
 		})
 	}); err != nil {
 		return nil, err
@@ -360,7 +352,8 @@ func (bc *Blockchain) SaveTx(tx SignedTx) error {
 	}
 
 	return bc.db.Update(func(txn *badger.Txn) error {
-		return txn.Set(tx.Hash.Bytes(), encodedTx)
+		key := append(txPrefix, tx.Hash.Bytes()...)
+		return txn.Set(key, encodedTx)
 	})
 }
 
@@ -380,15 +373,10 @@ func (bc *Blockchain) ApplyTx(tx SignedTx) error {
 			tx.From.String(), fromAddr.Balance, tx.Cost())
 	}
 
-	fmt.Println("fromAddr", fromAddr.Balance)
-	fmt.Println("toAddr", toAddr.Balance)
 	fromAddr.Balance -= tx.Cost()
 	toAddr.Balance += tx.Value
 
 	fromAddr.Nonce = tx.Nonce
-
-	fmt.Println("fromAddr", tx.Cost(), fromAddr.Balance)
-	fmt.Println("toAddr", toAddr.Balance)
 
 	from, err := fromAddr.Serialize()
 	if err != nil {

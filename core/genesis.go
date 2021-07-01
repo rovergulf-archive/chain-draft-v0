@@ -20,10 +20,10 @@ var genesisSymbols = map[string]bool{
 type Genesis struct {
 	ChainId     string                            `json:"chain_id" yaml:"chain_id"`
 	GenesisTime time.Time                         `json:"genesis_time" yaml:"genesis_time"`
-	Difficulty  uint64                            `json:"difficulty" yaml:"difficulty"`
 	GasLimit    uint64                            `json:"gas_limit" yaml:"gas_limit"`
 	Coinbase    common.Address                    `json:"coinbase" yaml:"coinbase"`
 	Symbol      string                            `json:"symbol" yaml:"symbol"`
+	Units       string                            `json:"units" yaml:"units"`
 	ParentHash  common.Hash                       `json:"parent_hash" yaml:"parent_hash"`
 	Alloc       map[common.Address]GenesisAccount `json:"alloc" yaml:"alloc"`
 	ExtraData   []byte                            `json:"extra_data,omitempty" yaml:"extra_data,omitempty"`
@@ -54,10 +54,6 @@ func (g *Genesis) Validate() error {
 
 	if g.GasLimit == 0 {
 		return fmt.Errorf("gas limit should be more than 0")
-	}
-
-	if g.Difficulty == 0 {
-		return fmt.Errorf("difficulty should be more than 0")
 	}
 
 	for addr := range g.Alloc {

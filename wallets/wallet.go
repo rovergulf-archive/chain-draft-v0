@@ -27,8 +27,7 @@ type Wallet struct {
 }
 
 func (w *Wallet) Serialize() ([]byte, error) {
-	buf := bytes.Buffer{}
-
+	var buf bytes.Buffer
 	encoder := gob.NewEncoder(&buf)
 	if err := encoder.Encode(w); err != nil {
 		log.Panic(err)

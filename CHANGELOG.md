@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 ### Changed
+- provide address on node run, to switch node used account
 
 ### Fixed
 - balance database saving
