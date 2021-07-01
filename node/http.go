@@ -1,8 +1,9 @@
 package node
 
 import (
+	"bytes"
 	"context"
-	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
@@ -26,10 +27,11 @@ func (n *Node) serveHttp() error {
 	r.HandleFunc("/metrics/json", n.DiscoverMetrics).Methods(http.MethodGet)
 	r.HandleFunc("/routes", n.WalkRoutes).Methods(http.MethodGet)
 
-	r.HandleFunc(endpointStatus, n.NodeStatus).Methods(http.MethodGet)
+	r.HandleFunc(endpointStatus, n.healthCheck).Methods(http.MethodGet)
 	r.HandleFunc(endpointAddPeer, n.AddPeerNode).Methods(http.MethodGet)
 	r.HandleFunc(endpointSync, n.SyncPeers).Methods(http.MethodGet)
 
+	r.HandleFunc("/node/info", n.nodeInfo).Methods(http.MethodGet)
 	r.HandleFunc("/chain/info", n.healthCheck).Methods(http.MethodGet)
 
 	r.HandleFunc("/genesis", n.ShowGenesis).Methods(http.MethodGet)
@@ -38,8 +40,13 @@ func (n *Node) serveHttp() error {
 	r.HandleFunc("/block/{hash}", n.FindBlock).Methods(http.MethodGet)
 	r.HandleFunc("/balances", n.ListBalances).Methods(http.MethodGet)
 	r.HandleFunc("/balances/{addr}", n.GetBalance).Methods(http.MethodGet)
-	r.HandleFunc("/tx/add", n.TxAdd).Methods(http.MethodGet)
-	r.HandleFunc("/tx/find/{hash}", n.healthCheck).Methods(http.MethodGet)
+	r.HandleFunc("/tx/add", n.txAdd).Methods(http.MethodPost)
+	r.HandleFunc("/tx/{hash}", n.txFind).Methods(http.MethodGet)
+
+	r.HandleFunc("/accounts", n.healthCheck).Methods(http.MethodGet)
+	r.HandleFunc("/accounts", n.healthCheck).Methods(http.MethodPost)
+	r.HandleFunc("/accounts", n.healthCheck).Methods(http.MethodPut)
+	r.HandleFunc("/accounts/{address}", n.healthCheck).Methods(http.MethodGet)
 
 	return http.ListenAndServe(n.metadata.ApiAddress(), &n.httpHandler)
 }
@@ -127,7 +134,7 @@ func (n *Node) WalkRoutes(w http.ResponseWriter, r *http.Request) {
 	n.httpResponse(w, results)
 }
 
-func (n *Node) NodeStatus(w http.ResponseWriter, r *http.Request) {
+func (n *Node) nodeInfo(w http.ResponseWriter, r *http.Request) {
 	//ctx := r.Context()
 	lb, err := n.bc.GetBlock(n.bc.LastHash)
 	if err != nil {
@@ -212,10 +219,10 @@ func (n *Node) GetBalance(w http.ResponseWriter, r *http.Request) {
 	n.httpResponse(w, balance)
 }
 
-func (n *Node) TxAdd(w http.ResponseWriter, r *http.Request) {
+func (n *Node) txAdd(w http.ResponseWriter, r *http.Request) {
 	//ctx := r.Context()
-	req := TxAddReq{}
-	decoder := gob.NewDecoder(r.Body)
+	var req TxAddReq
+	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&req); err != nil {
 		n.httpResponse(w, err, http.StatusBadRequest)
 		return
@@ -229,41 +236,79 @@ func (n *Node) TxAdd(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.FromPwd == "" {
-		n.httpResponse(w, fmt.Errorf("password to decrypt the '%s' account is required. 'from_pwd' is empty", from.String()), http.StatusInternalServerError)
+		n.httpResponse(w, fmt.Errorf("passphrase to decrypt the '%s' account is required. 'from_pwd' is empty",
+			from.String()), http.StatusBadRequest)
 		return
 	}
 
 	nonce := n.bc.GetNextAccountNonce(from)
-	tx, err := core.NewTransaction(from, common.HexToAddress(req.To), req.Value, nonce, []byte(req.Data))
+	tx, err := core.NewTransaction(from, common.HexToAddress(req.To), req.Value, nonce, req.Data)
 	if err != nil {
+		n.logger.Errorf("Unable to create new transaction: %s", err)
 		n.httpResponse(w, err, http.StatusBadRequest)
+		return
+	}
+
+	if err := tx.SetHash(); err != nil {
+		n.logger.Errorf("Unable to set transaction hash: %s", err)
+		n.httpResponse(w, err, http.StatusInternalServerError)
 		return
 	}
 
 	storedKey, err := n.wm.FindAccountKey(from)
 	if err != nil {
+		n.logger.Errorf("Unable to find stored account key: %s", err)
 		n.httpResponse(w, err, http.StatusBadRequest)
 		return
 	}
 
 	key, err := keystore.DecryptKey(storedKey, req.FromPwd)
 	if err != nil {
+		n.logger.Errorf("Unable to find stored account key: %s", err)
 		n.httpResponse(w, err, http.StatusBadRequest)
 		return
 	}
 
 	signedTx, err := wallets.NewSignedTx(tx, key.PrivateKey)
 	if err != nil {
+		n.logger.Errorf("Unable to sign tx: %s", err)
 		n.httpResponse(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	if err := n.AddPendingTX(*signedTx, n.metadata); err != nil {
+	if err := n.AddPendingTX(signedTx, n.metadata); err != nil {
+		n.logger.Errorf("Unable to add pending tx: %s", err)
 		n.httpResponse(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	n.httpResponse(w, true, http.StatusNotImplemented)
+	n.httpResponse(w, map[string]interface{}{
+		"tx_hash": tx.Hash,
+	})
+}
+
+func (n *Node) txFind(w http.ResponseWriter, r *http.Request) {
+	//ctx := r.Context()
+	vars := mux.Vars(r)
+	hashVar := vars["hash"]
+	if len(hashVar) == 0 {
+		n.httpResponse(w, fmt.Errorf("invalid hash"), http.StatusBadRequest)
+		return
+	}
+
+	hash := common.HexToHash(hashVar)
+	if bytes.Compare(hash.Bytes(), common.Hash{}.Bytes()) == 0 {
+		n.httpResponse(w, fmt.Errorf("invalid hash"), http.StatusBadRequest)
+		return
+	}
+
+	tx, err := n.bc.FindTransaction(hash.Bytes())
+	if err != nil {
+		n.httpResponse(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	n.httpResponse(w, tx)
 }
 
 func (n *Node) ListBlocks(w http.ResponseWriter, r *http.Request) {

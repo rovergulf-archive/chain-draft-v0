@@ -195,7 +195,7 @@ func walletsPrintPrivKeyCmd() *cobra.Command {
 				return err
 			}
 
-			return writeOutput(cmd, wallet.Key)
+			return writeOutput(cmd, wallet.GetKey())
 		},
 		TraverseChildren: true,
 	}

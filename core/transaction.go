@@ -24,31 +24,28 @@ var (
 
 // Transaction represents a Bitcoin transaction
 type Transaction struct {
-	From     common.Address  `json:"from" yaml:"from"`
-	To       *common.Address `json:"to" yaml:"to"` // destination of contract, use nil for contract creation
-	Value    uint64          `json:"value" yaml:"value"`
-	Nonce    uint64          `json:"nonce" yaml:"nonce"`
-	Gas      uint64          `json:"gas" yaml:"gas"`
-	GasPrice uint64          `json:"gas_price" yaml:"gas_price"`
-	Data     []byte          `json:"data" yaml:"data"` // contract data
-	Time     int64           `json:"time" yaml:"time"`
+	Hash     common.Hash    `json:"hash" yaml:"hash"`
+	From     common.Address `json:"from" yaml:"from"`
+	To       common.Address `json:"to" yaml:"to"` // destination of contract, use empty address for contract creation
+	Nonce    uint64         `json:"nonce" yaml:"nonce"`
+	Value    uint64         `json:"value" yaml:"value"`
+	Gas      uint64         `json:"gas" yaml:"gas"`
+	GasPrice uint64         `json:"gas_price" yaml:"gas_price"`
+	Data     []byte         `json:"data" yaml:"data"` // contract data
+	Time     int64          `json:"time" yaml:"time"`
 }
 
-type SignedTx struct {
-	Transaction
-	Sig []byte `json:"sig" yaml:"sig"`
-}
-
-// Hash returns a hash of the transaction
-func (tx *Transaction) Hash() (common.Hash, error) {
+// SetHash sets a hash of the transaction
+func (tx *Transaction) SetHash() error {
 	txCopy := *tx
 
 	serializedCopy, err := txCopy.Serialize()
 	if err != nil {
-		return common.Hash{}, err
+		return err
 	}
 
-	return sha256.Sum256(serializedCopy), nil
+	tx.Hash = sha256.Sum256(serializedCopy)
+	return nil
 }
 
 // Serialize encodes Transaction with gob encoder
@@ -70,14 +67,14 @@ func (tx *Transaction) Deserialize(data []byte) error {
 }
 
 // NewTransaction creates a new transaction
-func NewTransaction(from, to common.Address, amount uint64, nonce uint64, data []byte) (*Transaction, error) {
+func NewTransaction(from, to common.Address, amount uint64, nonce uint64, data []byte) (Transaction, error) {
 	if from == to {
-		return nil, fmt.Errorf("transaction cannot be sent to yourself")
+		return Transaction{}, fmt.Errorf("transaction cannot be sent to yourself")
 	}
 
-	return &Transaction{
+	return Transaction{
 		From:     from,
-		To:       &to,
+		To:       to,
 		Value:    amount,
 		Nonce:    nonce,
 		Gas:      0,
@@ -87,13 +84,21 @@ func NewTransaction(from, to common.Address, amount uint64, nonce uint64, data [
 	}, nil
 }
 
-func (t SignedTx) IsAuthentic() (bool, error) {
-	txHash, err := t.Transaction.Hash()
-	if err != nil {
-		return false, err
-	}
+func (tx *Transaction) IsReward() bool {
+	return bytes.Compare(tx.Data, txRewardData) == 0
+}
 
-	recoveredPubKey, err := crypto.SigToPub(txHash[:], t.Sig)
+func (tx *Transaction) Cost() uint64 {
+	return tx.Value + TxFee
+}
+
+type SignedTx struct {
+	Transaction
+	Sig []byte `json:"sig" yaml:"sig"`
+}
+
+func (t SignedTx) IsAuthentic() (bool, error) {
+	recoveredPubKey, err := crypto.SigToPub(t.Transaction.Hash[:], t.Sig)
 	if err != nil {
 		return false, err
 	}
@@ -102,13 +107,6 @@ func (t SignedTx) IsAuthentic() (bool, error) {
 	recoveredPubKeyBytesHash := crypto.Keccak256(recoveredPubKeyBytes[1:])
 	recoveredAccount := common.BytesToAddress(recoveredPubKeyBytesHash[12:])
 
-	return recoveredAccount.Hex() == t.From.Hex(), nil
-}
-
-func (tx *Transaction) IsReward() bool {
-	return bytes.Compare(tx.Data, txRewardData) == 0
-}
-
-func (tx *Transaction) Cost() uint64 {
-	return tx.Value + TxFee
+	fmt.Println(recoveredAccount.Hex(), t.Transaction.From.Hex())
+	return recoveredAccount.Hex() == t.Transaction.From.Hex(), nil
 }

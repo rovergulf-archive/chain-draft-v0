@@ -6,7 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rovergulf/rbn/database/badgerdb"
-	"github.com/rovergulf/rbn/pkg/config"
+	"github.com/rovergulf/rbn/params"
 	"go.uber.org/zap"
 )
 
@@ -26,7 +26,7 @@ type Manager struct {
 }
 
 // NewManager returns wallets Manager instance
-func NewManager(opts config.Options) (*Manager, error) {
+func NewManager(opts params.Options) (*Manager, error) {
 	badgerOpts := badger.DefaultOptions(opts.WalletsFilePath)
 	db, err := badgerdb.OpenDB(opts.WalletsFilePath, badgerOpts)
 	if err != nil {
@@ -65,8 +65,8 @@ func (m *Manager) AddWallet(key *keystore.Key, auth string) (*Wallet, error) {
 	}
 
 	wallet := &Wallet{
-		Code: []byte(auth),
-		Key:  key,
+		Auth: auth,
+		key:  key,
 	}
 
 	return wallet, nil
@@ -124,7 +124,7 @@ func (m *Manager) GetWallet(address common.Address, auth string) (*Wallet, error
 	}
 
 	return &Wallet{
-		Code: []byte(auth),
-		Key:  key,
+		Auth: auth,
+		key:  key,
 	}, nil
 }

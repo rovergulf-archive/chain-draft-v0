@@ -30,10 +30,12 @@ const (
 
 // PeerNode represents distributed node network metadata
 type PeerNode struct {
-	Ip       string         `json:"ip" yaml:"ip"`
-	Port     uint64         `json:"port" yaml:"port"`
-	Root     bool           `json:"root" yaml:"root"`
-	Account  common.Address `json:"account" yaml:"account"`
+	Ip      string         `json:"ip" yaml:"ip"`
+	Port    uint64         `json:"port" yaml:"port"`
+	Root    bool           `json:"root" yaml:"root"`
+	Account common.Address `json:"account" yaml:"account"`
+	Stake   uint64         `json:"stake" yaml:"stake"`
+
 	syncMode SyncMode
 
 	// Whenever my node already established connection, sync with this Peer
@@ -136,18 +138,7 @@ func (pn *PeerNode) Deserialize(src []byte) error {
 	return decoder.Decode(pn)
 }
 
-func DeserializePeerNode(src []byte) (*PeerNode, error) {
-	var pn PeerNode
-
-	decoder := gob.NewDecoder(bytes.NewReader(src))
-	if err := decoder.Decode(&pn); err != nil {
-		return nil, err
-	}
-
-	return &pn, nil
-}
-
-func CollectPeerUrls(nodes map[string]PeerNode) []string {
+func collectPeerUrls(nodes map[string]PeerNode) []string {
 	var peers []string
 
 	for peer := range nodes {

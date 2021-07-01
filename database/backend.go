@@ -26,7 +26,6 @@ type Backend interface {
 	SaveTx(key string, data []byte) error
 	FindTransaction(key string) ([]byte, error)
 	ListTransactions() ([][]byte, error)
-	Delete(key string) error
 
 	Shutdown()
 }

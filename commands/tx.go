@@ -152,14 +152,6 @@ func txSendCmd() *cobra.Command {
 			}
 			defer wm.Shutdown()
 
-			fromAddr := common.HexToAddress(from)
-
-			wallet, err := wm.GetWallet(fromAddr, auth)
-			if err != nil {
-				logger.Errorf("Unable to get wallet: %s", err)
-				return err
-			}
-
 			client, err := node.NewClient(ctx, logger, viper.GetString("network.addr"))
 			if err != nil {
 				return err
@@ -168,7 +160,7 @@ func txSendCmd() *cobra.Command {
 
 			addTxReq := node.TxAddReq{
 				From:    from,
-				FromPwd: wallet.GetPassphrase(),
+				FromPwd: auth,
 				To:      to,
 				Value:   amount,
 				Data:    nil,

@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	homedir "github.com/mitchellh/go-homedir"
+	"github.com/rovergulf/rbn/node"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -109,9 +110,9 @@ func setConfigDefaults() {
 	viper.SetDefault("node_id", "")
 
 	// storage
-	viper.SetDefault("pid_file", "/var/run/rbn/pidfile")
 	viper.SetDefault("db", "")
 	viper.SetDefault("data_dir", "tmp")
+	viper.SetDefault("pid_file", "/var/run/rbn/pidfile")
 	viper.SetDefault("backup_dir", backupsDir)
 
 	viper.SetDefault("dgraph.enabled", false)
@@ -137,6 +138,7 @@ func setConfigDefaults() {
 	// http server
 	viper.SetDefault("node.addr", "127.0.0.1")
 	viper.SetDefault("node.port", 9420)
+	viper.SetDefault("node.sync_mode", node.SyncModeDefault)
 	viper.SetDefault("node.sync_interval", 5)
 	viper.SetDefault("node.cache_dir", "")
 
@@ -150,8 +152,8 @@ func setConfigDefaults() {
 	//viper.SetDefault("cache.size", 256 << 20) // 256mb
 
 	// Runtime configuration
-	//viper.SetDefault("runtime.max_cpu", runtime.NumCPU()) // take 2/3 available by default
-	//viper.SetDefault("runtime.max_mem", getAvailableOSMemory()) // same as above
+	//viper.SetDefault("runtime.max_cpu", runtime.NumCPU())
+	//viper.SetDefault("runtime.max_mem", getAvailableOSMemory())
 
 }
 

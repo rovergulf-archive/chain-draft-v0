@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
+## 1 Jul 2021
+
+### Added
+
+### Changed
+
+### Fixed
+- balance database saving
+
+### Removed
+- PoW usage
+
+
 ## 30 Jun 2021
 
 ### Added
@@ -12,11 +25,10 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - get account key handler
 - sign transactions with open wallet
+- node currently asks for account passphrase to run (behavior should be updated)
 
 ### Fixed
 - Genesis db encoding - removed `Transaction.MarshalJSON` method
-
-### Removed
 
 
 ## 29 Jun 2021

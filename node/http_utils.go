@@ -80,6 +80,7 @@ func (h *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (n *Node) httpResponse(w http.ResponseWriter, i interface{}, statusCode ...int) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
 	if len(statusCode) > 0 {
 		w.WriteHeader(statusCode[0])
 	} else {

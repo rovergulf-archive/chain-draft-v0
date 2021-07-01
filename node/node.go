@@ -9,7 +9,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/database/badgerdb"
-	"github.com/rovergulf/rbn/pkg/config"
+	"github.com/rovergulf/rbn/params"
 	"github.com/rovergulf/rbn/pkg/exit"
 	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/viper"
@@ -39,15 +39,14 @@ const (
 	endpointSync    = "/node/sync"
 	endpointAddPeer = "/node/peer"
 
-	RootAddress  = "0x5793f98ea0911e12742c785c316903b50b0ddaca"
-	DefaultMiner = "0x0000000000000000000000000000000000000000"
+	CoinbaseAccount = "0x5793f98ea0911e12742c785c316903b50b0ddaca"
 )
 
 // Node represents blockchain network peer node
 type Node struct {
 	metadata PeerNode
 
-	config config.Options
+	config params.Options
 
 	bc *core.Blockchain
 	wm *wallets.Manager
@@ -55,7 +54,6 @@ type Node struct {
 
 	grpcServer  *grpc.Server
 	httpHandler httpServer
-	rpcListener net.Listener
 
 	isMining bool
 
@@ -65,7 +63,6 @@ type Node struct {
 
 	newSyncBlocks chan core.Block
 	newSyncTXs    chan core.SignedTx
-	errCh         chan error
 
 	raftStorage *raft.MemoryStorage
 	//Lock *sync.RWMutex
@@ -76,15 +73,16 @@ type Node struct {
 }
 
 // New creates and returns new node if blockchain available
-func New(opts config.Options) (*Node, error) {
+func New(opts params.Options) (*Node, error) {
 	nodeAddr := viper.GetString("node.addr")
 	nodePort := viper.GetUint64("node.port")
 
-	syncMode := viper.GetString("node.sync")
+	syncMode := viper.GetString("node.sync_mode")
 	if syncMode == "" {
 		syncMode = string(SyncModeDefault)
 	}
-	mainNode := NewPeerNode(DefaultNodeIP, DefaultNodePort, common.HexToAddress(opts.Address), SyncMode(syncMode))
+
+	mainNode := NewPeerNode(DefaultNodeIP, DefaultNodePort, common.HexToAddress(CoinbaseAccount), SyncMode(syncMode))
 	pn := NewPeerNode(nodeAddr, nodePort, common.HexToAddress(opts.Address), SyncMode(syncMode))
 
 	n := &Node{
@@ -178,7 +176,7 @@ func (n *Node) Run() error {
 		}
 	}()
 
-	go n.mine(ctx)
+	go n.race(ctx)
 	go n.sync(ctx)
 
 	httpApiAddress := fmt.Sprintf("%s:%s",
@@ -227,16 +225,6 @@ func (n *Node) Shutdown() {
 		}()
 	}
 
-	if n.rpcListener != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := n.rpcListener.Close(); err != nil {
-				n.logger.Errorf("Unable to close rpc listener: %s", err)
-			}
-		}()
-	}
-
 	if n.closer != nil {
 		wg.Add(1)
 		go func() {
@@ -255,28 +243,6 @@ func (n *Node) Shutdown() {
 func (n *Node) IsKnownPeer(peer PeerNode) bool {
 	_, ok := n.knownPeers[peer.Account.Hex()]
 	return ok
-}
-
-func CmdToBytes(cmd string) []byte {
-	var bytes [12]byte
-
-	for i, c := range cmd {
-		bytes[i] = byte(c)
-	}
-
-	return bytes[:]
-}
-
-func BytesToCmd(bytes []byte) string {
-	var cmd []byte
-
-	for _, b := range bytes {
-		if b != 0x0 {
-			cmd = append(cmd, b)
-		}
-	}
-
-	return fmt.Sprintf("%s", cmd)
 }
 
 func (n *Node) initOpentracing(address string) (opentracing.Tracer, io.Closer, error) {
@@ -336,24 +302,24 @@ func (n *Node) collectNetInterfaces() error {
 	return nil
 }
 
-func (n *Node) mine(ctx context.Context) error {
+func (n *Node) race(ctx context.Context) {
 	var miningCtx context.Context
 	var stopCurrentMining context.CancelFunc
 
-	ticker := time.NewTicker(time.Second * miningIntervalSeconds)
+	ticker := time.NewTicker(time.Second * 10)
 
 	for {
 		select {
 		case <-ticker.C:
 			go func() {
 				n.logger.Debugw("Check for available transactions",
-					"txs", len(n.newSyncTXs), "is_mining", n.isMining)
-				if len(n.newSyncTXs) > 0 && !n.isMining {
+					"txs", len(n.pendingTXs), "is_mining", n.isMining)
+				if len(n.pendingTXs) > 0 && !n.isMining {
 					n.isMining = true
 
 					miningCtx, stopCurrentMining = context.WithCancel(ctx)
-					err := n.minePendingTXs(miningCtx)
-					if err != nil {
+					// TODO rename
+					if err := n.minePendingTXs(miningCtx); err != nil {
 						n.logger.Errorf("Failed to mine pending txs: %s", err)
 					}
 
@@ -372,7 +338,7 @@ func (n *Node) mine(ctx context.Context) error {
 		case <-ctx.Done():
 			ticker.Stop()
 			n.logger.Debug("Mining context cancelled")
-			return nil
+			break
 		}
 	}
 }
@@ -389,21 +355,26 @@ func (n *Node) minePendingTXs(ctx context.Context) error {
 		txs = append(txs, tx)
 	}
 
-	blockToMine := NewPendingBlock(
-		n.bc.LastHash,
-		n.bc.ChainLength.Uint64(),
-		n.metadata.Account,
-		txs,
-	)
-
-	minedBlock, err := Mine(ctx, blockToMine)
+	lb, err := n.bc.GetBlock(n.bc.LastHash)
 	if err != nil {
 		return err
 	}
 
-	n.removeMinedPendingTXs(minedBlock)
+	header := core.BlockHeader{
+		PrevHash:  lb.Hash,
+		Number:    lb.Number + 1,
+		Timestamp: time.Now().Unix(),
+		Validator: common.Address{},
+	}
 
-	if err := n.bc.AddBlock(minedBlock); err != nil {
+	newBlock := core.NewBlock(header, txs)
+	if err := newBlock.SetHash(); err != nil {
+		return err
+	}
+
+	n.removeMinedPendingTXs(newBlock)
+
+	if err := n.bc.AddBlock(newBlock); err != nil {
 		return err
 	}
 
@@ -416,26 +387,32 @@ func (n *Node) removeMinedPendingTXs(block *core.Block) {
 	}
 
 	for _, tx := range block.Transactions {
-		txHash, _ := tx.Hash()
-		if _, exists := n.pendingTXs[txHash.Hex()]; exists {
-			fmt.Printf("\t-archiving mined TX: %s\n", txHash.Hex())
+		if _, exists := n.pendingTXs[tx.Hash.Hex()]; exists {
+			fmt.Printf("\t-archiving mined TX: %s\n", tx.Hash.Hex())
 
-			delete(n.pendingTXs, txHash.Hex())
+			delete(n.pendingTXs, tx.Hash.Hex())
 		}
 	}
 }
 func (n *Node) AddPendingTX(tx core.SignedTx, peer PeerNode) error {
-	txHash, err := tx.Hash()
-	if err != nil {
+	//ok, err := tx.IsAuthentic()
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//if !ok {
+	//	return fmt.Errorf("wrong TX. Sender '%s' is forged", tx.From)
+	//}
+
+	if err := n.bc.SaveTx(tx); err != nil {
 		return err
 	}
 
-	if err := n.bc.ApplyTx(txHash, tx); err != nil {
+	if err := n.bc.ApplyTx(tx); err != nil {
 		return err
 	}
 
-	n.pendingTXs[txHash.Hex()] = tx
-	n.newSyncTXs <- tx
+	n.pendingTXs[tx.Hash.Hex()] = tx
 
 	return nil
 }

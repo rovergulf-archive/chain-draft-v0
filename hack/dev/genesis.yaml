@@ -1,7 +1,7 @@
 genesis_time: "2021-06-01T00:00:00.000000000Z"
 chain_id: "Rovergulf Blockchain Network ledger"
 symbol: "TBB"
-difficulty: 400
+
 gasLimit: 2100000
 
 coinbase: "0x5793f98ea0911e12742c785c316903b50b0ddaca"

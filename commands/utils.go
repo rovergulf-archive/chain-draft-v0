@@ -3,7 +3,7 @@ package commands
 import (
 	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/node"
-	"github.com/rovergulf/rbn/pkg/config"
+	"github.com/rovergulf/rbn/params"
 	"github.com/rovergulf/rbn/pkg/resutil"
 	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/cobra"
@@ -33,7 +33,7 @@ func getNodeDbFilePath() string {
 	return path.Join(getNodeDataPath(), node.DbFileName)
 }
 
-func getBlockchainConfig(cmd *cobra.Command) config.Options {
+func getBlockchainConfig(cmd *cobra.Command) params.Options {
 	address := viper.GetString("address")
 	nodeId := viper.GetString("node_id")
 	minerAuth := viper.GetString("auth")
@@ -53,7 +53,7 @@ func getBlockchainConfig(cmd *cobra.Command) config.Options {
 		viper.Set("auth", minerAuth)
 	}
 
-	opts := config.Options{
+	opts := params.Options{
 		Address: address,
 		NodeId:  nodeId,
 		Logger:  logger,

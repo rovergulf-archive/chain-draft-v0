@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func (n *Node) sync(ctx context.Context) error {
+func (n *Node) sync(ctx context.Context) {
 	n.doSync(ctx)
 
 	syncTimerDuration := viper.GetDuration("node.sync_interval")
@@ -84,6 +84,7 @@ func (n *Node) syncBlocks(peer PeerNode, status *StatusRes) error {
 	if localBlockNumber == 0 && status.Number == 0 {
 		newBlocksCount = 1
 	}
+
 	n.logger.Infof("Found %d new blocks from Peer %s", newBlocksCount, peer.TcpAddress())
 
 	blocks, err := n.fetchBlocksFromPeer(peer, n.bc.LastHash)
@@ -105,7 +106,7 @@ func (n *Node) syncBlocks(peer PeerNode, status *StatusRes) error {
 func (n *Node) syncKnownPeers(status *StatusRes) error {
 	for _, statusPeer := range status.KnownPeers {
 		if !n.IsKnownPeer(statusPeer) {
-			fmt.Printf("Found new Peer %s\n", statusPeer.TcpAddress())
+			n.logger.Infof("Found new Peer %s", statusPeer.TcpAddress())
 
 			if err := n.addPeer(statusPeer); err != nil {
 				return err

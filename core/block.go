@@ -4,9 +4,8 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
-	"encoding/json"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
-	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -15,14 +14,28 @@ var (
 )
 
 type BlockHeader struct {
-	PrevHash   common.Hash    `json:"prev_hash" yaml:"prev_hash"`
-	Hash       common.Hash    `json:"hash" yaml:"hash"`
-	Root       common.Hash    `json:"root" yaml:"root"`
-	Number     uint64         `json:"number" yaml:"number"`
-	Nonce      uint64         `json:"nonce" yaml:"nonce"`
-	Difficulty uint64         `json:"difficulty" yaml:"difficulty"`
-	Timestamp  int64          `json:"timestamp" yaml:"timestamp"`
-	Miner      common.Address `json:"miner" yaml:"miner"`
+	PrevHash  common.Hash    `json:"prev_hash" yaml:"prev_hash"`
+	Hash      common.Hash    `json:"hash" yaml:"hash"`
+	Root      common.Hash    `json:"root" yaml:"root"`
+	Number    uint64         `json:"number" yaml:"number"`
+	Timestamp int64          `json:"timestamp" yaml:"timestamp"`
+	Validator common.Address `json:"validator" yaml:"validator"`
+}
+
+func (bh *BlockHeader) Validate() error {
+	if bytes.Compare(bh.Hash.Bytes(), common.Hash{}.Bytes()) == 0 {
+		return fmt.Errorf("invalid block hash")
+	}
+
+	if bytes.Compare(bh.Validator.Bytes(), common.Address{}.Bytes()) == 0 {
+		return fmt.Errorf("invalid validator address")
+	}
+
+	if bh.Timestamp == 0 {
+		return fmt.Errorf("invalid timestamp")
+	}
+
+	return nil
 }
 
 // Block represents
@@ -32,22 +45,16 @@ type Block struct {
 }
 
 // NewBlock creates and returns Block
-func NewBlock(prev common.Hash, number uint64, nonce uint64, time int64, miner common.Address, txs []SignedTx) *Block {
+func NewBlock(header BlockHeader, txs []SignedTx) *Block {
 	return &Block{
-		BlockHeader: BlockHeader{
-			PrevHash:  prev,
-			Number:    number,
-			Nonce:     nonce,
-			Timestamp: time,
-			Miner:     miner,
-		},
+		BlockHeader:  header,
 		Transactions: txs,
 	}
 }
 
 // SetHash sets a hash of the block
 func (b *Block) SetHash() error {
-	enc, err := b.Encode()
+	enc, err := b.Serialize()
 	if err != nil {
 		return err
 	}
@@ -63,12 +70,7 @@ func (b *Block) HashTransactions() ([]byte, error) {
 	var txHash [32]byte
 
 	for _, tx := range b.Transactions {
-		hash, err := tx.Hash()
-		if err != nil {
-			return nil, err
-		}
-
-		txHashes = append(txHashes, hash.Bytes())
+		txHashes = append(txHashes, tx.Hash.Bytes())
 	}
 	txHash = sha256.Sum256(bytes.Join(txHashes, []byte{}))
 
@@ -98,47 +100,6 @@ func DeserializeBlock(d []byte) (*Block, error) {
 
 	decoder := gob.NewDecoder(bytes.NewReader(d))
 	if err := decoder.Decode(&block); err != nil {
-		return nil, err
-	}
-
-	return &block, nil
-}
-
-// Encode serializes the block to json
-func (b *Block) Encode() ([]byte, error) {
-	jsonRaw, err := json.Marshal(b)
-	if err != nil {
-		return nil, err
-	}
-
-	return jsonRaw, nil
-}
-
-// EncodeYaml serializes the block to yaml
-func (b *Block) EncodeYaml() ([]byte, error) {
-	jsonRaw, err := yaml.Marshal(b)
-	if err != nil {
-		return nil, err
-	}
-
-	return jsonRaw, nil
-}
-
-// DecodeBlock deserializes a block from json
-func DecodeBlock(jsonRaw []byte) (*Block, error) {
-	var block Block
-
-	if err := json.Unmarshal(jsonRaw, &block); err != nil {
-		return nil, err
-	}
-
-	return &block, nil
-}
-
-// DecodeYAMLBlock deserializes a block from yaml
-func DecodeYAMLBlock(jsonRaw []byte) (*Block, error) {
-	var block Block
-	if err := yaml.Unmarshal(jsonRaw, &block); err != nil {
 		return nil, err
 	}
 

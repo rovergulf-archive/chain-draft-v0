@@ -122,10 +122,17 @@ func NewGenesisBlock(g *Genesis) (*Block, error) {
 			return nil, err
 		}
 
-		txs = append(txs, SignedTx{Transaction: *tx})
+		txs = append(txs, SignedTx{Transaction: tx})
 	}
 
-	b := NewBlock(g.ParentHash, 0, 0, time.Now().Unix(), g.Coinbase, txs)
+	header := BlockHeader{
+		PrevHash:  g.ParentHash,
+		Number:    0,
+		Timestamp: time.Now().Unix(),
+		Validator: g.Coinbase,
+	}
+
+	b := NewBlock(header, txs)
 	if err := b.SetHash(); err != nil {
 		return nil, err
 	}

@@ -3,7 +3,6 @@
   "chain_id": "Rovergulf Blockchain Network ledger",
   "symbol": "TBB",
   "coinbase": "0x5793f98ea0911e12742c785c316903b50b0ddaca",
-  "difficulty": 400,
   "gas_limit": 2100000,
   "alloc": {
     "0xdc041a7aa9cda8026db25cc0dbedcd9eeeeab6b0": {

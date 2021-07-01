@@ -16,16 +16,19 @@ import (
 	"log"
 )
 
+func init() {
+	gob.Register(elliptic.P256())
+}
+
 type Wallet struct {
-	Code []byte `json:"code" yaml:"code"`
+	Auth string `json:"auth" yaml:"auth"`
 	Data []byte `json:"-" yaml:"-"` // stores encrypted key
-	*keystore.Key
+	key  *keystore.Key
 }
 
 func (w *Wallet) Serialize() ([]byte, error) {
 	buf := bytes.Buffer{}
 
-	gob.Register(elliptic.P256())
 	encoder := gob.NewEncoder(&buf)
 	if err := encoder.Encode(w); err != nil {
 		log.Panic(err)
@@ -34,13 +37,18 @@ func (w *Wallet) Serialize() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+func (w *Wallet) Deserialize(data []byte) error {
+	decoder := gob.NewDecoder(bytes.NewReader(data))
+	return decoder.Decode(w)
+}
+
 func (w *Wallet) SignTx(tx *core.Transaction) (*core.SignedTx, error) {
 	rawTx, err := tx.Serialize()
 	if err != nil {
 		return nil, err
 	}
 
-	sig, err := Sign(rawTx, w.Key.PrivateKey)
+	sig, err := Sign(rawTx, w.key.PrivateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -51,34 +59,21 @@ func (w *Wallet) SignTx(tx *core.Transaction) (*core.SignedTx, error) {
 	}, nil
 }
 
-func (w *Wallet) GetPassphrase() string {
-	return string(w.Code)
-}
-
 func (w *Wallet) Address() common.Address {
-	return w.Key.Address
+	return w.key.Address
 }
 
-func (w *Wallet) Open() error {
-	key, err := keystore.DecryptKey(w.Data, w.GetPassphrase())
+func (w *Wallet) GetKey() *keystore.Key {
+	return w.key
+}
+
+func (w *Wallet) Open() (*keystore.Key, error) {
+	key, err := keystore.DecryptKey(w.Data, w.Auth)
 	if err != nil {
-		return err
-	}
-
-	w.Key = key
-	return nil
-}
-
-func DeserializeWallet(data []byte) (*Wallet, error) {
-	var w Wallet
-
-	gob.Register(elliptic.P256())
-	decoder := gob.NewDecoder(bytes.NewReader(data))
-	if err := decoder.Decode(&w); err != nil {
 		return nil, err
 	}
 
-	return &w, nil
+	return key, nil
 }
 
 func SignTx(tx core.Transaction, privKey *ecdsa.PrivateKey) ([]byte, error) {
@@ -95,21 +90,20 @@ func SignTx(tx core.Transaction, privKey *ecdsa.PrivateKey) ([]byte, error) {
 	return sig, nil
 }
 
-func NewSignedTx(tx *core.Transaction, privKey *ecdsa.PrivateKey) (*core.SignedTx, error) {
-	sig, err := SignTx(*tx, privKey)
+func NewSignedTx(tx core.Transaction, privKey *ecdsa.PrivateKey) (core.SignedTx, error) {
+	sig, err := SignTx(tx, privKey)
 	if err != nil {
-		return nil, nil
+		return core.SignedTx{}, nil
 	}
 
-	return &core.SignedTx{
-		Transaction: *tx,
+	return core.SignedTx{
+		Transaction: tx,
 		Sig:         sig,
 	}, nil
 }
 
 func Sign(msg []byte, privKey *ecdsa.PrivateKey) (sig []byte, err error) {
 	msgHash := sha256.Sum256(msg)
-
 	return crypto.Sign(msgHash[:], privKey)
 }
 

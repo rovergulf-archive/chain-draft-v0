@@ -1,14 +1,14 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/opentracing/opentracing-go"
-	"github.com/rovergulf/rbn/core/types"
 	"github.com/rovergulf/rbn/database/badgerdb"
-	"github.com/rovergulf/rbn/pkg/config"
+	"github.com/rovergulf/rbn/params"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"io"
@@ -46,8 +46,16 @@ type Blockchain struct {
 	closer io.Closer
 }
 
+func (bc *Blockchain) Shutdown() {
+	if bc.db != nil {
+		if err := bc.db.Close(); err != nil {
+			bc.logger.Errorf("Unable to close db: %s", err)
+		}
+	}
+}
+
 // InitBlockchain creates a new blockchain DB
-func InitBlockchain(opts config.Options) (*Blockchain, error) {
+func InitBlockchain(opts params.Options) (*Blockchain, error) {
 	if dbExists(opts.DbFilePath) {
 		return nil, fmt.Errorf("genesis already initalized")
 	}
@@ -87,12 +95,11 @@ func InitBlockchain(opts config.Options) (*Blockchain, error) {
 	}
 
 	bc := Blockchain{
-		LastHash:    common.Hash{},
-		Balances:    make(map[common.Address]Balance),
-		ChainLength: big.NewInt(0),
-		db:          db,
-		logger:      opts.Logger,
-		tracer:      opts.Tracer,
+		LastHash: common.Hash{},
+		Balances: make(map[common.Address]Balance),
+		db:       db,
+		logger:   opts.Logger,
+		tracer:   opts.Tracer,
 	}
 
 	for addr := range gen.Alloc {
@@ -130,11 +137,6 @@ func InitBlockchain(opts config.Options) (*Blockchain, error) {
 			return err
 		}
 
-		if err := txn.Set([]byte("cl"), []byte{0}); err != nil {
-			opts.Logger.Errorf("Unable to set chain length: %s", err)
-			return err
-		}
-
 		for addr := range bc.Balances {
 			bal := bc.Balances[addr]
 			balanceEncoded, err := bal.Serialize()
@@ -159,7 +161,7 @@ func InitBlockchain(opts config.Options) (*Blockchain, error) {
 }
 
 // ContinueBlockchain continues from existing database Blockchain
-func ContinueBlockchain(opts config.Options) (*Blockchain, error) {
+func ContinueBlockchain(opts params.Options) (*Blockchain, error) {
 	b := Blockchain{
 		Balances:    make(map[common.Address]Balance),
 		ChainLength: big.NewInt(0),
@@ -226,22 +228,18 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 			return nil
 		}
 
-		if err := txn.Set(block.Hash.Bytes(), blockData); err != nil {
-			return err
-		}
-
-		item, err := txn.Get([]byte("lh"))
+		lastHash, err := txn.Get([]byte("lh"))
 		if err != nil {
 			return err
 		}
 
-		return item.Value(func(val []byte) error {
-			item, err := txn.Get(val)
+		return lastHash.Value(func(val []byte) error {
+			lb, err := txn.Get(val)
 			if err != nil {
 				return err
 			}
 
-			return item.Value(func(val []byte) error {
+			return lb.Value(func(val []byte) error {
 				lastBlock, err := DeserializeBlock(val)
 				if err != nil {
 					bc.logger.Errorf("Unable to deserialize block: %s", err)
@@ -249,10 +247,15 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 				}
 
 				if block.Number > lastBlock.Number {
+					if err := txn.Set(block.Hash.Bytes(), blockData); err != nil {
+						return err
+					}
+
 					if err := txn.Set([]byte("lh"), block.Hash.Bytes()); err != nil {
 						bc.logger.Errorf("Unable to set last hash value: %s", err)
 						return err
 					}
+
 					bc.LastHash = block.Hash
 				}
 
@@ -304,7 +307,7 @@ func (bc *Blockchain) GetBlockHashes() ([]common.Hash, error) {
 
 		blocks = append(blocks, block.Hash)
 
-		if !IsBlockHashValid(block.PrevHash) {
+		if bytes.Compare(block.PrevHash.Bytes(), common.Hash{}.Bytes()) == 0 {
 			break
 		}
 	}
@@ -350,51 +353,62 @@ func (bc *Blockchain) FindTransaction(txId []byte) (*SignedTx, error) {
 	return &tx, nil
 }
 
-func (bc *Blockchain) ApplyTx(txHash common.Hash, tx SignedTx) error {
+func (bc *Blockchain) SaveTx(tx SignedTx) error {
 	encodedTx, err := tx.Serialize()
 	if err != nil {
 		return err
 	}
 
 	return bc.db.Update(func(txn *badger.Txn) error {
-		fromAddr, err := bc.GetBalance(tx.From)
-		if err != nil {
-			return err
-		}
-
-		var toAddr *Balance
-		if tx.To != nil {
-			toAddr, err = bc.GetBalance(*tx.To)
-			if err != nil {
-				return err
-			}
-		} else if tx.Data != nil {
-			return fmt.Errorf("not implemented")
-		} else {
-			return fmt.Errorf("invalid transaction")
-		}
-
-		fromAddr.Balance -= tx.Cost()
-		toAddr.Balance += tx.Value
-
-		fromAddr.Nonce = tx.Nonce
-
-		return txn.Set(txHash.Bytes(), encodedTx)
+		return txn.Set(tx.Hash.Bytes(), encodedTx)
 	})
 }
 
-func (bc *Blockchain) GetReceipt(tx *Transaction) (types.Receipt, error) {
-	var r types.Receipt
-
-	return r, nil
-}
-
-func (bc *Blockchain) Shutdown() {
-	if bc.db != nil {
-		if err := bc.db.Close(); err != nil {
-			bc.logger.Errorf("Unable to close db: %s", err)
-		}
+func (bc *Blockchain) ApplyTx(tx SignedTx) error {
+	fromAddr, err := bc.GetBalance(tx.From)
+	if err != nil {
+		return err
 	}
+
+	toAddr, err := bc.GetBalance(tx.To)
+	if err != nil {
+		return err
+	}
+
+	if tx.Cost() > fromAddr.Balance {
+		return fmt.Errorf("wrong TX. Sender '%s' balance is %d TBB. Tx cost is %d TBB",
+			tx.From.String(), fromAddr.Balance, tx.Cost())
+	}
+
+	fmt.Println("fromAddr", fromAddr.Balance)
+	fmt.Println("toAddr", toAddr.Balance)
+	fromAddr.Balance -= tx.Cost()
+	toAddr.Balance += tx.Value
+
+	fromAddr.Nonce = tx.Nonce
+
+	fmt.Println("fromAddr", tx.Cost(), fromAddr.Balance)
+	fmt.Println("toAddr", toAddr.Balance)
+
+	from, err := fromAddr.Serialize()
+	if err != nil {
+		return err
+	}
+
+	to, err := toAddr.Serialize()
+	if err != nil {
+		return err
+	}
+
+	return bc.db.Update(func(txn *badger.Txn) error {
+		senderKey := append(balancesPrefix, fromAddr.Address.Bytes()...)
+		if err := txn.Set(senderKey, from); err != nil {
+			return err
+		}
+
+		recipientKey := append(balancesPrefix, toAddr.Address.Bytes()...)
+		return txn.Set(recipientKey, to)
+	})
 }
 
 func IsBlockHashValid(hash common.Hash) bool {
