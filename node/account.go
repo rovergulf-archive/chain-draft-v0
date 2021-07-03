@@ -5,7 +5,11 @@ import (
 	"github.com/rovergulf/rbn/wallets"
 )
 
-func (n *Node) SaveNodeAccount(w *wallets.Wallet) error {
+func (n *Node) saveNodeAccount(w *wallets.Wallet) error {
+	if err := w.EncryptKey(); err != nil {
+		return err
+	}
+
 	data, err := w.Serialize()
 	if err != nil {
 		return err
@@ -32,5 +36,38 @@ func (n *Node) GetNodeAccount() (*wallets.Wallet, error) {
 		return nil, err
 	}
 
+	if err := w.Open(); err != nil {
+		return nil, err
+	}
+
 	return &w, nil
+}
+
+func (n *Node) setupNodeAccount() error {
+	w, err := n.GetNodeAccount()
+	if err != nil {
+		if err == badger.ErrKeyNotFound {
+			passphrase, err := wallets.NewRandomMnemonic()
+			if err != nil {
+				return err
+			}
+			key, err := wallets.NewRandomKey()
+			if err != nil {
+				return err
+			}
+			newWallet, err := n.wm.AddWallet(key, passphrase)
+			if err != nil {
+				return err
+			}
+
+			if err := n.saveNodeAccount(newWallet); err != nil {
+				return err
+			}
+			w = newWallet
+		}
+		return err
+	}
+
+	n.account = w
+	return nil
 }

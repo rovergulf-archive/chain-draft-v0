@@ -23,7 +23,7 @@ type BlockHeader struct {
 }
 
 func (bh *BlockHeader) Validate() error {
-	if bytes.Compare(bh.Hash.Bytes(), common.Hash{}.Bytes()) == 0 {
+	if bytes.Compare(bh.Hash.Bytes(), common.HexToHash("").Bytes()) == 0 {
 		return fmt.Errorf("invalid block hash")
 	}
 
@@ -70,7 +70,11 @@ func (b *Block) HashTransactions() ([]byte, error) {
 	var txHash [32]byte
 
 	for _, tx := range b.Transactions {
-		txHashes = append(txHashes, tx.Hash.Bytes())
+		hash, err := tx.Hash()
+		if err != nil {
+			return nil, err
+		}
+		txHashes = append(txHashes, hash)
 	}
 	txHash = sha256.Sum256(bytes.Join(txHashes, []byte{}))
 

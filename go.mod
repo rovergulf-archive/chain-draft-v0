@@ -7,6 +7,10 @@ require (
 	github.com/HdrHistogram/hdrhistogram-go v1.1.0 // indirect
 	github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46 // indirect
 	github.com/btcsuite/btcd v0.22.0-beta // indirect
+	github.com/coreos/bbolt v1.3.2 // indirect
+	github.com/coreos/etcd v3.3.13+incompatible // indirect
+	github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e // indirect
+	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
 	github.com/dgraph-io/badger/v3 v3.2103.0
 	github.com/dgraph-io/dgo/v210 v210.0.0-20210421093152-78a2fece3ebd
@@ -20,7 +24,10 @@ require (
 	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/google/uuid v1.2.0
 	github.com/gorilla/mux v1.8.0
+	github.com/grpc-ecosystem/go-grpc-middleware v1.0.0 // indirect
+	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
 	github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645
+	github.com/jonboulle/clockwork v0.1.0 // indirect
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/opentracing/opentracing-go v1.2.0
@@ -32,13 +39,17 @@ require (
 	github.com/prometheus/tsdb v0.10.0 // indirect
 	github.com/rjeczalik/notify v0.9.2 // indirect
 	github.com/shirou/gopsutil v3.21.5+incompatible // indirect
-	github.com/spf13/cobra v1.1.3
+	github.com/soheilhy/cmux v0.1.4 // indirect
+	github.com/spf13/cobra v1.2.1
 	github.com/spf13/viper v1.8.1
 	github.com/stretchr/objx v0.2.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.6 // indirect
+	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
 	github.com/tyler-smith/go-bip39 v1.1.0
 	github.com/uber/jaeger-client-go v2.29.1+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible
+	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
+	go.etcd.io/bbolt v1.3.2 // indirect
 	go.etcd.io/etcd/raft/v3 v3.5.0 // indirect
 	go.uber.org/atomic v1.8.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect
@@ -50,5 +61,6 @@ require (
 	google.golang.org/grpc v1.39.0
 	google.golang.org/protobuf v1.27.1
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
+	gopkg.in/resty.v1 v1.12.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0
 )

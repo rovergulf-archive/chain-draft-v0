@@ -4,20 +4,19 @@ import (
 	"bytes"
 	"encoding/gob"
 	"github.com/ethereum/go-ethereum/common"
-	"math/big"
 )
 
-// Receipt represents miner node
+// Receipt represents an
 type Receipt struct {
 	Addr common.Address `json:"addr" yaml:"addr"`
 
 	Balance         uint64         `json:"balance" yaml:"balance"`
-	TxHash          common.Hash    `json:"tx_hash"`
 	ContractAddress common.Address `json:"contract_address"`
 	GasUsed         uint64         `json:"gas_used"`
 
 	BlockHash        common.Hash `json:"blockHash,omitempty"`
-	BlockNumber      *big.Int    `json:"block_number,omitempty"`
+	BlockNumber      uint64      `json:"block_number,omitempty"`
+	TxHash           common.Hash `json:"tx_hash"`
 	TransactionIndex uint        `json:"transaction_index"`
 }
 

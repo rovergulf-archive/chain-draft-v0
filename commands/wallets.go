@@ -2,7 +2,6 @@ package commands
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/console/prompt"
 	"github.com/rovergulf/rbn/wallets"
@@ -130,25 +129,24 @@ func walletsUpdateAuthCmd() *cobra.Command {
 				newAuth = input
 			} else {
 				// generate a random Mnemonic in English with 256 bits of entropy
-				entropy, _ := bip39.NewEntropy(256)
-				newAuth, _ = bip39.NewMnemonic(entropy)
+				mnemonic, err := wallets.NewRandomMnemonic()
+				if err != nil {
+					return err
+				}
+				newAuth = mnemonic
 
 				logger.Infof("Random Mnemonic passphrase to unlock wallet: \n\n\t%s\n", auth)
 				logger.Warn("Save this passphrase to access your wallet.",
 					"There is no way to recover it, but you can change it")
 			}
 
-			storedKey, err := wm.FindAccountKey(addr)
+			w, err := wm.GetWallet(addr, auth)
 			if err != nil {
+				logger.Errorf("Unable to get wallet: %s", err)
 				return err
 			}
 
-			key, err := keystore.DecryptKey(storedKey, auth)
-			if err != nil {
-				return err
-			}
-
-			if _, err := wm.AddWallet(key, newAuth); err != nil {
+			if _, err := wm.AddWallet(w.GetKey(), newAuth); err != nil {
 				return err
 			}
 

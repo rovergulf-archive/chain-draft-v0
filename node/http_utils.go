@@ -1,13 +1,18 @@
 package node
 
 import (
+	"context"
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/opentracing/opentracing-go"
+	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/prom2json"
 	"github.com/rovergulf/rbn/pkg/resutil"
+	"github.com/rovergulf/rbn/pkg/version"
 	"go.uber.org/zap"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const (
@@ -91,4 +96,87 @@ func (n *Node) httpResponse(w http.ResponseWriter, i interface{}, statusCode ...
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(fmt.Sprintf("Unable to write json response: %s", err)))
 	}
+}
+
+func (n *Node) WalkRoutes(w http.ResponseWriter, r *http.Request) {
+	var results []map[string]interface{}
+
+	err := n.httpHandler.router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
+		res := make(map[string]interface{})
+
+		pathTemplate, err := route.GetPathTemplate()
+		if err == nil {
+			//h.Logger.Debug("ROUTE: ", pathTemplate)
+			res["route"] = pathTemplate
+		}
+		pathRegexp, err := route.GetPathRegexp()
+		if err == nil {
+			//h.Logger.Debug("Path regexp: ", pathRegexp)
+			res["regexp"] = pathRegexp
+		}
+		queriesTemplates, err := route.GetQueriesTemplates()
+		if err == nil {
+			//h.Logger.Debug("Queries templates: ", strings.Join(queriesTemplates, ","))
+			res["queries_templates"] = strings.Join(queriesTemplates, ",")
+		}
+		queriesRegexps, err := route.GetQueriesRegexp()
+		if err == nil {
+			//h.Logger.Debug("Queries regexps: ", strings.Join(queriesRegexps, ","))
+			res["queries_regexps"] = strings.Join(queriesRegexps, ",")
+		}
+		methods, err := route.GetMethods()
+		if err == nil {
+			//h.Logger.Debug("Methods: ", strings.Join(methods, ","))
+			res["methods"] = methods
+		}
+
+		results = append(results, res)
+		return nil
+	})
+	if err != nil {
+		n.logger.Error(err)
+	}
+
+	n.httpResponse(w, results)
+}
+
+func (n *Node) healthCheck(w http.ResponseWriter, r *http.Request) {
+	n.httpResponse(w, map[string]interface{}{
+		"http_status": http.StatusOK,
+		"timestamp":   time.Now().Unix(),
+		"run_date":    version.RunDate.Format(time.RFC1123),
+		"node_status": "healthy",
+		"is_mining":   n.isMining,
+	})
+}
+
+func (n *Node) DiscoverMetrics(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	metricsUrl := fmt.Sprintf("%s/metrics", n.metadata.HttpApiAddress())
+	req, err := http.Get(metricsUrl)
+	if err != nil {
+		n.logger.Errorf("Unable to send request to prometheus metrics: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		n.httpResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	mfChan := make(chan *dto.MetricFamily, 1024)
+
+	// Missing input means we are reading from an URL.
+	if err := prom2json.ParseReader(req.Body, mfChan); err != nil {
+		n.logger.Errorf("error reading metrics: %s", err)
+		n.httpResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var result []*prom2json.Family
+	for mf := range mfChan {
+		result = append(result, prom2json.NewFamily(mf))
+	}
+
+	n.httpResponse(w, result)
 }

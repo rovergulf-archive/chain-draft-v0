@@ -24,7 +24,6 @@ var (
 
 // Transaction represents a Bitcoin transaction
 type Transaction struct {
-	Hash     common.Hash    `json:"hash" yaml:"hash"`
 	From     common.Address `json:"from" yaml:"from"`
 	To       common.Address `json:"to" yaml:"to"` // destination of contract, use empty address for contract creation
 	Nonce    uint64         `json:"nonce" yaml:"nonce"`
@@ -35,17 +34,17 @@ type Transaction struct {
 	Time     int64          `json:"time" yaml:"time"`
 }
 
-// SetHash sets a hash of the transaction
-func (tx *Transaction) SetHash() error {
+// Hash returns a hash of the transaction
+func (tx *Transaction) Hash() ([]byte, error) {
 	txCopy := *tx
 
 	serializedCopy, err := txCopy.Serialize()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	tx.Hash = sha256.Sum256(serializedCopy)
-	return nil
+	hash := sha256.Sum256(serializedCopy)
+	return hash[:], nil
 }
 
 // Serialize encodes Transaction with gob encoder
@@ -98,7 +97,12 @@ type SignedTx struct {
 }
 
 func (t SignedTx) IsAuthentic() (bool, error) {
-	recoveredPubKey, err := crypto.SigToPub(t.Transaction.Hash[:], t.Sig)
+	txHash, err := t.Transaction.Hash()
+	if err != nil {
+		return false, err
+	}
+
+	recoveredPubKey, err := crypto.SigToPub(txHash, t.Sig)
 	if err != nil {
 		return false, err
 	}
@@ -107,6 +111,5 @@ func (t SignedTx) IsAuthentic() (bool, error) {
 	recoveredPubKeyBytesHash := crypto.Keccak256(recoveredPubKeyBytes[1:])
 	recoveredAccount := common.BytesToAddress(recoveredPubKeyBytesHash[12:])
 
-	fmt.Println(recoveredAccount.Hex(), t.Transaction.From.Hex())
 	return recoveredAccount.Hex() == t.Transaction.From.Hex(), nil
 }

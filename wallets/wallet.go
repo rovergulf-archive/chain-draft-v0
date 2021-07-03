@@ -13,7 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
 	"github.com/rovergulf/rbn/core"
-	"log"
+	"github.com/tyler-smith/go-bip39"
 )
 
 func init() {
@@ -21,16 +21,16 @@ func init() {
 }
 
 type Wallet struct {
-	Auth string `json:"auth" yaml:"auth"`
-	Data []byte `json:"-" yaml:"-"` // stores encrypted key
-	key  *keystore.Key
+	Auth    string `json:"auth" yaml:"auth"`
+	KeyData []byte `json:"-" yaml:"-"` // stores encrypted key
+	key     *keystore.Key
 }
 
 func (w *Wallet) Serialize() ([]byte, error) {
 	var buf bytes.Buffer
 	encoder := gob.NewEncoder(&buf)
 	if err := encoder.Encode(w); err != nil {
-		log.Panic(err)
+		return nil, err
 	}
 
 	return buf.Bytes(), nil
@@ -42,6 +42,10 @@ func (w *Wallet) Deserialize(data []byte) error {
 }
 
 func (w *Wallet) SignTx(tx *core.Transaction) (*core.SignedTx, error) {
+	if w.key == nil {
+		return nil, fmt.Errorf("wallet is locked")
+	}
+
 	rawTx, err := tx.Serialize()
 	if err != nil {
 		return nil, err
@@ -66,13 +70,24 @@ func (w *Wallet) GetKey() *keystore.Key {
 	return w.key
 }
 
-func (w *Wallet) Open() (*keystore.Key, error) {
-	key, err := keystore.DecryptKey(w.Data, w.Auth)
+func (w *Wallet) Open() error {
+	key, err := keystore.DecryptKey(w.KeyData, w.Auth)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return key, nil
+	w.key = key
+	return nil
+}
+
+func (w *Wallet) EncryptKey() error {
+	data, err := keystore.EncryptKey(w.key, w.Auth, keystore.StandardScryptN, keystore.StandardScryptP)
+	if err != nil {
+		return err
+	}
+
+	w.KeyData = data
+	return nil
 }
 
 func SignTx(tx core.Transaction, privKey *ecdsa.PrivateKey) ([]byte, error) {
@@ -130,4 +145,16 @@ func NewRandomKey() (*keystore.Key, error) {
 	}
 
 	return key, nil
+}
+
+func NewRandomMnemonic() (string, error) {
+	entropy, err := bip39.NewEntropy(256)
+	if err != nil {
+		return "", err
+	}
+	mnemonic, err := bip39.NewMnemonic(entropy)
+	if err != nil {
+		return "", err
+	}
+	return mnemonic, nil
 }

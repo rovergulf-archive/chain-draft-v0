@@ -6,12 +6,12 @@ import (
 )
 
 type StatusRes struct {
-	LastHash   string                   `json:"block_hash,omitempty" yaml:"last_hash,omitempty"`
-	Number     uint64                   `json:"chain_length,omitempty" yaml:"chain_length,omitempty"`
-	KnownPeers map[string]PeerNode      `json:"peers_known,omitempty" yaml:"known_peers,omitempty"`
-	PendingTXs map[string]core.SignedTx `json:"pending_txs,omitempty" yaml:"pending_t_xs,omitempty"`
-	IsMining   bool                     `json:"is_mining" yaml:"is_mining"`
-	DbSize     map[string]int64         `json:"db_size" yaml:"db_size"`
+	LastHash   string                        `json:"block_hash,omitempty" yaml:"last_hash,omitempty"`
+	Number     uint64                        `json:"chain_length,omitempty" yaml:"chain_length,omitempty"`
+	KnownPeers map[string]PeerNode           `json:"peers_known,omitempty" yaml:"known_peers,omitempty"`
+	PendingTXs map[common.Hash]core.SignedTx `json:"pending_txs,omitempty" yaml:"pending_t_xs,omitempty"`
+	IsMining   bool                          `json:"is_mining" yaml:"is_mining"`
+	DbSize     map[string]int64              `json:"db_size" yaml:"db_size"`
 }
 
 type SyncRes struct {

@@ -4,9 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
-## 1 Jul 2021
+## 3 Jul 2021
 
 ### Added
+- node account dump command
+- transaction signer verification
+
+### Changed
+
+### Fixed
+
+### Removed
+- legacy sync methods
+
+
+## 1 Jul 2021
 
 ### Changed
 - provide address on node run, to switch node used account

@@ -60,7 +60,7 @@ type Node struct {
 
 	knownPeers knownPeers
 
-	pendingTXs map[string]core.SignedTx
+	pendingTXs map[common.Hash]core.SignedTx
 
 	newSyncBlocks chan core.Block
 	newSyncTXs    chan core.SignedTx
@@ -95,11 +95,14 @@ func New(opts params.Options) (*Node, error) {
 		config: opts,
 		bc:     nil,
 		logger: opts.Logger,
-		knownPeers: map[string]PeerNode{
-			mainNode.TcpAddress(): mainNode,
-			pn.TcpAddress():       pn,
+		knownPeers: knownPeers{
+			peers: map[string]PeerNode{
+				mainNode.TcpAddress(): mainNode,
+				pn.TcpAddress():       pn,
+			},
+			lock: new(sync.RWMutex),
 		},
-		pendingTXs:    make(map[string]core.SignedTx),
+		pendingTXs:    make(map[common.Hash]core.SignedTx),
 		newSyncTXs:    make(chan core.SignedTx),
 		newSyncBlocks: make(chan core.Block),
 		//Lock:       new(sync.RWMutex),
@@ -152,7 +155,7 @@ func (n *Node) Init() error {
 	}
 
 	if err := n.setupNodeAccount(); err != nil {
-		n.logger.Errorf("Unable to setup node account")
+		n.logger.Errorf("Unable to setup node account: %s", err)
 		return err
 	}
 	n.logger.Debugf("Node account: %s", n.account.Address())
@@ -191,6 +194,8 @@ func (n *Node) Run(ctx context.Context) error {
 }
 
 func (n *Node) Shutdown() {
+	defer close(n.newSyncTXs)
+	defer close(n.newSyncBlocks)
 
 	var wg sync.WaitGroup
 
@@ -244,7 +249,9 @@ func (n *Node) Shutdown() {
 }
 
 func (n *Node) IsKnownPeer(peer PeerNode) bool {
-	_, ok := n.knownPeers[peer.Account.Hex()]
+	n.knownPeers.lock.RLock()
+	defer n.knownPeers.lock.RUnlock()
+	_, ok := n.knownPeers.peers[peer.Account.Hex()]
 	return ok
 }
 
@@ -305,47 +312,6 @@ func (n *Node) collectNetInterfaces() error {
 	return nil
 }
 
-func (n *Node) setupNodeAccount() error {
-	providedAddr := viper.GetString("address")
-	providedAuth := viper.GetString("auth")
-	if len(providedAddr) > 0 && len(providedAuth) > 0 {
-		w, err := n.wm.GetWallet(common.HexToAddress(providedAddr), providedAuth)
-		if err != nil {
-			return err
-		} else {
-			n.account = w
-		}
-		return n.SaveNodeAccount(w)
-	}
-
-	w, err := n.GetNodeAccount()
-	if err != nil {
-		if err == badger.ErrKeyNotFound {
-			passphrase, err := wallets.GetRandomMnemonic()
-			if err != nil {
-				return err
-			}
-			key, err := wallets.NewRandomKey()
-			if err != nil {
-				return err
-			}
-			newWallet, err := n.wm.AddWallet(key, passphrase)
-			if err != nil {
-				return err
-			}
-
-			if err := n.SaveNodeAccount(newWallet); err != nil {
-				return err
-			}
-			w = newWallet
-		}
-		return err
-	}
-
-	n.account = w
-	return nil
-}
-
 func (n *Node) race(ctx context.Context) {
 	var miningCtx context.Context
 	var stopCurrentMining context.CancelFunc
@@ -356,9 +322,8 @@ func (n *Node) race(ctx context.Context) {
 		select {
 		case <-ticker.C:
 			go func() {
-				n.logger.Debugw("Check for available transactions",
-					"txs", len(n.pendingTXs), "is_mining", n.isMining)
 				if len(n.pendingTXs) > 0 && !n.isMining {
+					n.logger.Debugw("There is transactions available", "txs", len(n.pendingTXs))
 					n.isMining = true
 
 					miningCtx, stopCurrentMining = context.WithCancel(ctx)
@@ -408,7 +373,7 @@ func (n *Node) minePendingTXs(ctx context.Context) error {
 		PrevHash:  lb.Hash,
 		Number:    lb.Number + 1,
 		Timestamp: time.Now().Unix(),
-		Validator: common.Address{},
+		Validator: n.account.Address(),
 	}
 
 	newBlock := core.NewBlock(header, txs)
@@ -427,28 +392,43 @@ func (n *Node) minePendingTXs(ctx context.Context) error {
 
 func (n *Node) removeMinedPendingTXs(block *core.Block) {
 	if len(block.Transactions) > 0 && len(n.pendingTXs) > 0 {
-		fmt.Println("Updating in-memory Pending TXs Pool:")
+		n.logger.Info("Updating in-memory Pending TXs Pool:")
 	}
 
 	for _, tx := range block.Transactions {
-		if _, exists := n.pendingTXs[tx.Hash.Hex()]; exists {
-			fmt.Printf("\t-archiving mined TX: %s\n", tx.Hash.Hex())
+		txHash, err := tx.Transaction.Hash()
+		if err != nil {
+			n.logger.Warnf("Unable to get transaction hash: %s", err)
+			continue
+		}
 
-			delete(n.pendingTXs, tx.Hash.Hex())
+		hash := common.BytesToHash(txHash)
+		if _, exists := n.pendingTXs[hash]; exists {
+			n.logger.Info("Archiving mined TX: %s", hash)
+
+			delete(n.pendingTXs, hash)
 		}
 	}
 }
 func (n *Node) AddPendingTX(tx core.SignedTx, peer PeerNode) error {
-	//ok, err := tx.IsAuthentic()
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//if !ok {
-	//	return fmt.Errorf("wrong TX. Sender '%s' is forged", tx.From)
-	//}
+	ok, err := tx.IsAuthentic()
+	if err != nil {
+		return err
+	}
 
-	if err := n.bc.SaveTx(tx); err != nil {
+	if !ok {
+		// TODO set report counter and attacker account purge
+		return fmt.Errorf("wrong TX. Sender '%s' is forged", tx.From)
+	}
+
+	txHash, err := tx.Transaction.Hash()
+	if err != nil {
+		return err
+	}
+
+	hash := common.BytesToHash(txHash)
+
+	if err := n.bc.SaveTx(hash, tx); err != nil {
 		return err
 	}
 
@@ -456,7 +436,7 @@ func (n *Node) AddPendingTX(tx core.SignedTx, peer PeerNode) error {
 		return err
 	}
 
-	n.pendingTXs[tx.Hash.Hex()] = tx
+	n.pendingTXs[hash] = tx
 
 	return nil
 }

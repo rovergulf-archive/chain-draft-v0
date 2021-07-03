@@ -2,12 +2,14 @@ package commands
 
 import (
 	"context"
+	"fmt"
 	"github.com/ethereum/go-ethereum/console/prompt"
 	"github.com/rovergulf/rbn/node"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"io/ioutil"
 	"os"
+	"path"
 	"strconv"
 )
 
@@ -27,6 +29,7 @@ func nodeCmd() *cobra.Command {
 
 	nodeCmd.AddCommand(nodeRunCmd())
 	nodeCmd.AddCommand(nodeStopCmd())
+	nodeCmd.AddCommand(nodeAccountDumpCmd())
 
 	return nodeCmd
 }
@@ -129,15 +132,46 @@ func nodeStopCmd() *cobra.Command {
 }
 
 func nodeAccountDumpCmd() *cobra.Command {
-	nodeAccountCmd := &cobra.Command{
+	nodeAccountDumpCmd := &cobra.Command{
 		Use:   "account-dump",
 		Short: "Export account key",
 		Long:  ``,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return nil
+			n, err := node.New(getBlockchainConfig(cmd))
+			if err != nil {
+				return err
+			}
+
+			if err := n.Init(); err != nil {
+				return err
+			}
+
+			w, err := n.GetNodeAccount()
+			if err != nil {
+				return err
+			}
+
+			filePath, _ := cmd.Flags().GetString("file")
+			if path.Ext(filePath) != ".json" {
+				return fmt.Errorf("file extension must be json")
+			}
+
+			if err := ioutil.WriteFile(filePath, w.KeyData, 0755); err != nil {
+				return err
+			}
+
+			return writeOutput(cmd, map[string]interface{}{
+				"address": w.Address(),
+				"auth":    w.Auth,
+			})
 		},
 		TraverseChildren: true,
 	}
 
-	return nodeAccountCmd
+	addNodeIdFlag(nodeAccountDumpCmd)
+
+	nodeAccountDumpCmd.Flags().StringP("file", "f", "", "Specify key file path to write")
+	nodeAccountDumpCmd.MarkFlagRequired("file")
+
+	return nodeAccountDumpCmd
 }

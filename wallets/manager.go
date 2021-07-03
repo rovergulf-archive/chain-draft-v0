@@ -65,8 +65,9 @@ func (m *Manager) AddWallet(key *keystore.Key, auth string) (*Wallet, error) {
 	}
 
 	wallet := &Wallet{
-		Auth: auth,
-		key:  key,
+		Auth:    auth,
+		KeyData: encryptedKey,
+		key:     key,
 	}
 
 	return wallet, nil
@@ -93,7 +94,7 @@ func (m *Manager) GetAllAddresses() ([]common.Address, error) {
 	return addresses, nil
 }
 
-func (m *Manager) FindAccountKey(address common.Address) ([]byte, error) {
+func (m *Manager) findAccountKey(address common.Address) ([]byte, error) {
 	var privateKey []byte
 	if err := m.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(address.Bytes())
@@ -113,7 +114,7 @@ func (m *Manager) FindAccountKey(address common.Address) ([]byte, error) {
 }
 
 func (m *Manager) GetWallet(address common.Address, auth string) (*Wallet, error) {
-	encryptedKey, err := m.FindAccountKey(address)
+	encryptedKey, err := m.findAccountKey(address)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +125,8 @@ func (m *Manager) GetWallet(address common.Address, auth string) (*Wallet, error
 	}
 
 	return &Wallet{
-		Auth: auth,
-		key:  key,
+		Auth:    auth,
+		KeyData: encryptedKey,
+		key:     key,
 	}, nil
 }

@@ -8,13 +8,17 @@ import (
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/spf13/viper"
+	"sync"
 )
 
 var (
 	peerPrefix = []byte("peers/")
 )
 
-type knownPeers map[string]PeerNode
+type knownPeers struct {
+	peers map[string]PeerNode
+	lock  *sync.RWMutex
+}
 
 type SyncMode string
 
@@ -34,7 +38,6 @@ type PeerNode struct {
 	Port    uint64         `json:"port" yaml:"port"`
 	Root    bool           `json:"root" yaml:"root"`
 	Account common.Address `json:"account" yaml:"account"`
-	Stake   uint64         `json:"stake" yaml:"stake"`
 
 	syncMode SyncMode
 
@@ -99,11 +102,13 @@ func (n *Node) addPeer(peer PeerNode) error {
 		return err
 	}
 
+	n.knownPeers.lock.Lock()
+	defer n.knownPeers.lock.Unlock()
 	return n.db.Update(func(txn *badger.Txn) error {
 		if err := txn.Set(peer.GetId(), pn); err != nil {
 			return err
 		} else {
-			n.knownPeers[string(peer.GetId())] = peer
+			n.knownPeers.peers[string(peer.GetId())] = peer
 		}
 		return nil
 	})
@@ -111,11 +116,13 @@ func (n *Node) addPeer(peer PeerNode) error {
 
 // removePeer deletes peer from node storage
 func (n *Node) removePeer(peer PeerNode) error {
+	n.knownPeers.lock.Lock()
+	defer n.knownPeers.lock.Unlock()
 	return n.db.Update(func(txn *badger.Txn) error {
 		if err := txn.Delete(peer.GetId()); err != nil {
 			return err
 		} else {
-			delete(n.knownPeers, string(peer.GetId()))
+			delete(n.knownPeers.peers, string(peer.GetId()))
 		}
 
 		return nil

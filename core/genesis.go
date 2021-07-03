@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
-	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
@@ -19,7 +18,7 @@ var genesisSymbols = map[string]bool{
 
 type Genesis struct {
 	ChainId     string                            `json:"chain_id" yaml:"chain_id"`
-	GenesisTime time.Time                         `json:"genesis_time" yaml:"genesis_time"`
+	GenesisTime int64                             `json:"genesis_time" yaml:"genesis_time"`
 	GasLimit    uint64                            `json:"gas_limit" yaml:"gas_limit"`
 	Coinbase    common.Address                    `json:"coinbase" yaml:"coinbase"`
 	Symbol      string                            `json:"symbol" yaml:"symbol"`
@@ -31,38 +30,21 @@ type Genesis struct {
 
 type GenesisAccount struct {
 	Balance uint64 `json:"balance" yaml:"balance"`
-	Nonce   uint64 `json:"nonce" yaml:"nonce"`
 	Auth    string `json:"auth" yaml:"auth"`
 }
 
-func (g *Genesis) Validate() error {
-	if len(g.ChainId) == 0 {
-		return fmt.Errorf("bad chain_id: %s", g.ChainId)
+func DefaultMainNetGenesis() *Genesis {
+	return &Genesis{
+		ChainId:     "",
+		GenesisTime: 1625319335,
+		GasLimit:    2100000,
+		Coinbase:    common.Address{},
+		Symbol:      "RBN",
+		Units:       "",
+		ParentHash:  common.Hash{},
+		Alloc:       nil,
+		ExtraData:   nil,
 	}
-
-	if bytes.Compare(g.Coinbase.Bytes(), common.Address{}.Bytes()) == 0 {
-		return fmt.Errorf("invalid coinbase address")
-	}
-
-	if g.GenesisTime.Unix() < 0 {
-		return fmt.Errorf("bad genesis timestamp: %s", g.GenesisTime)
-	}
-
-	if _, ok := genesisSymbols[g.Symbol]; !ok {
-		return fmt.Errorf("bad symbol: %s", g.Symbol)
-	}
-
-	if g.GasLimit == 0 {
-		return fmt.Errorf("gas limit should be more than 0")
-	}
-
-	for addr := range g.Alloc {
-		if bytes.Compare(addr.Bytes(), common.Address{}.Bytes()) == 0 {
-			return fmt.Errorf("invalid alloc address: %s", addr.Hex())
-		}
-	}
-
-	return nil
 }
 
 func (g *Genesis) Encode() ([]byte, error) {
@@ -113,7 +95,7 @@ func NewGenesisBlock(g *Genesis) (*Block, error) {
 
 	for addr := range g.Alloc {
 		coinbase := g.Alloc[addr]
-		tx, err := NewTransaction(g.Coinbase, addr, coinbase.Balance, coinbase.Nonce, g.ExtraData)
+		tx, err := NewTransaction(g.Coinbase, addr, coinbase.Balance, 0, g.ExtraData)
 		if err != nil {
 			return nil, err
 		}

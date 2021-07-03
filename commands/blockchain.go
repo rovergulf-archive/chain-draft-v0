@@ -35,7 +35,7 @@ func initBlockchainCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			bc, err := core.InitBlockchain(getBlockchainConfig(cmd))
 			if err != nil {
-				logger.Warnf("Unable to start blockchain: %s", err)
+				logger.Errorf("Unable to start blockchain: %s", err)
 				return err
 			}
 			defer bc.Shutdown()

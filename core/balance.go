@@ -39,11 +39,6 @@ func (b *Balance) Deserialize(data []byte) error {
 }
 
 func (bc *Blockchain) GetBalance(addr common.Address) (*Balance, error) {
-	b, ok := bc.Balances[addr]
-	if ok {
-		return &b, nil
-	}
-
 	var balance Balance
 
 	key := append(balancesPrefix, addr.Bytes()...)
@@ -93,18 +88,13 @@ func (bc *Blockchain) ListBalances() ([]*Balance, error) {
 }
 
 func (bc *Blockchain) GetNextAccountNonce(addr common.Address) uint64 {
-	balance, ok := bc.Balances[addr]
-	if ok {
-		return balance.Balance
-	}
-
 	b, err := bc.GetBalance(addr)
 	if err != nil {
-		bc.logger.Errorw("Unable to get balance")
+		if err != badger.ErrKeyNotFound {
+			bc.logger.Errorw("Unable to get balance: %s", err)
+		}
 		return 0
 	}
-
-	bc.Balances[addr] = *b
 
 	return b.Nonce
 }

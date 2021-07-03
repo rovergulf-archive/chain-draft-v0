@@ -29,12 +29,17 @@ func balancesListCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			bc, err := core.ContinueBlockchain(getBlockchainConfig(cmd))
 			if err != nil {
-				logger.Error("Unable to start blockchain: %s", err)
+				logger.Errorf("Unable to start blockchain: %s", err)
 				return err
 			}
 			defer bc.Shutdown()
 
-			return writeOutput(cmd, bc.Balances)
+			balances, err := bc.ListBalances()
+			if err != nil {
+				return err
+			}
+
+			return writeOutput(cmd, balances)
 		},
 	}
 

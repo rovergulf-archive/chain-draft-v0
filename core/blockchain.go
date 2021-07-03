@@ -12,7 +12,6 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"io"
-	"math/big"
 	"os"
 )
 
@@ -24,7 +23,12 @@ const (
 )
 
 var (
-	ErrChainNotExists = fmt.Errorf("chain db does not exists")
+	emptyHash = common.HexToHash("")
+)
+
+var (
+	ErrChainNotExists  = fmt.Errorf("chain db does not exists")
+	ErrGenesisNotFound = fmt.Errorf("genesis not found")
 )
 
 func dbExists(filePath string) bool {
@@ -36,9 +40,7 @@ func dbExists(filePath string) bool {
 }
 
 type Blockchain struct {
-	Balances    map[common.Address]Balance
-	LastHash    common.Hash
-	ChainLength *big.Int
+	LastHash common.Hash
 
 	db     *badger.DB
 	logger *zap.SugaredLogger
@@ -54,6 +56,22 @@ func (bc *Blockchain) Shutdown() {
 	}
 }
 
+func NewBlockchain(opts params.Options) (*Blockchain, error) {
+	opts.Badger = badger.DefaultOptions(opts.DbFilePath)
+	db, err := badgerdb.OpenDB(opts.DbFilePath, opts.Badger)
+	if err != nil {
+		opts.Logger.Errorf("Unable to open db file: %s", err)
+		return nil, err
+	}
+
+	return &Blockchain{
+		LastHash: common.Hash{},
+		db:       db,
+		logger:   opts.Logger,
+		tracer:   opts.Tracer,
+	}, nil
+}
+
 // InitBlockchain creates a new blockchain DB
 func InitBlockchain(opts params.Options) (*Blockchain, error) {
 	if dbExists(opts.DbFilePath) {
@@ -63,10 +81,6 @@ func InitBlockchain(opts params.Options) (*Blockchain, error) {
 	gen, err := loadGenesisFromFile(viper.GetString("genesis"))
 	if err != nil {
 		opts.Logger.Errorf("Unable to load genesis file: %s", err)
-		return nil, err
-	}
-
-	if err := gen.Validate(); err != nil {
 		return nil, err
 	}
 
@@ -96,24 +110,9 @@ func InitBlockchain(opts params.Options) (*Blockchain, error) {
 
 	bc := Blockchain{
 		LastHash: common.Hash{},
-		Balances: make(map[common.Address]Balance),
 		db:       db,
 		logger:   opts.Logger,
 		tracer:   opts.Tracer,
-	}
-
-	for addr := range gen.Alloc {
-		bc.Balances[addr] = Balance{
-			Address: addr,
-			Balance: gen.Alloc[addr].Balance,
-			Nonce:   gen.Alloc[addr].Nonce,
-		}
-	}
-
-	bc.Balances[gen.Coinbase] = Balance{
-		Address: gen.Coinbase,
-		Balance: 0,
-		Nonce:   1,
 	}
 
 	if err := db.Update(func(txn *badger.Txn) error {
@@ -137,8 +136,16 @@ func InitBlockchain(opts params.Options) (*Blockchain, error) {
 			return err
 		}
 
-		for addr := range bc.Balances {
-			bal := bc.Balances[addr]
+		for addr := range gen.Alloc {
+			genAcc := gen.Alloc[addr]
+
+			bal := Balance{
+				Address: common.Address{},
+				Balance: genAcc.Balance,
+				Nonce:   0,
+				Symbol:  gen.Symbol,
+				Units:   gen.Units,
+			}
 			balanceEncoded, err := bal.Serialize()
 			if err != nil {
 				return err
@@ -157,17 +164,17 @@ func InitBlockchain(opts params.Options) (*Blockchain, error) {
 		return nil, err
 	}
 
+	bc.LastHash = genesis.Hash
+
 	return &bc, nil
 }
 
 // ContinueBlockchain continues from existing database Blockchain
 func ContinueBlockchain(opts params.Options) (*Blockchain, error) {
 	b := Blockchain{
-		Balances:    make(map[common.Address]Balance),
-		ChainLength: big.NewInt(0),
-		logger:      opts.Logger,
-		tracer:      opts.Tracer,
-		closer:      opts.Closer,
+		logger: opts.Logger,
+		tracer: opts.Tracer,
+		closer: opts.Closer,
 	}
 
 	opts.Badger = badger.DefaultOptions(opts.DbFilePath)
@@ -206,7 +213,7 @@ func (bc *Blockchain) DbSize() (int64, int64) {
 
 // AddBlock adds a block with the provided transactions
 func (bc *Blockchain) AddBlock(block *Block) error {
-	if len(block.Hash.Bytes()) == 0 {
+	if bytes.Compare(block.Hash.Bytes(), emptyHash.Bytes()) == 0 {
 		return fmt.Errorf("bad block hash")
 	}
 
@@ -299,7 +306,7 @@ func (bc *Blockchain) GetBlockHashes() ([]common.Hash, error) {
 
 		blocks = append(blocks, block.Hash)
 
-		if bytes.Compare(block.PrevHash.Bytes(), common.Hash{}.Bytes()) == 0 {
+		if bytes.Compare(block.PrevHash.Bytes(), emptyHash.Bytes()) == 0 {
 			break
 		}
 	}
@@ -345,14 +352,14 @@ func (bc *Blockchain) FindTransaction(txId []byte) (*SignedTx, error) {
 	return &tx, nil
 }
 
-func (bc *Blockchain) SaveTx(tx SignedTx) error {
+func (bc *Blockchain) SaveTx(txHash common.Hash, tx SignedTx) error {
 	encodedTx, err := tx.Serialize()
 	if err != nil {
 		return err
 	}
 
+	key := append(txPrefix, txHash.Bytes()...)
 	return bc.db.Update(func(txn *badger.Txn) error {
-		key := append(txPrefix, tx.Hash.Bytes()...)
 		return txn.Set(key, encodedTx)
 	})
 }
@@ -360,11 +367,13 @@ func (bc *Blockchain) SaveTx(tx SignedTx) error {
 func (bc *Blockchain) ApplyTx(tx SignedTx) error {
 	fromAddr, err := bc.GetBalance(tx.From)
 	if err != nil {
+		bc.logger.Errorf("Unable to get sender balance: %s", err)
 		return err
 	}
 
 	toAddr, err := bc.GetBalance(tx.To)
 	if err != nil {
+		bc.logger.Errorf("Unable to get recipient balance: %s", err)
 		return err
 	}
 
@@ -397,11 +406,4 @@ func (bc *Blockchain) ApplyTx(tx SignedTx) error {
 		recipientKey := append(balancesPrefix, toAddr.Address.Bytes()...)
 		return txn.Set(recipientKey, to)
 	})
-}
-
-func IsBlockHashValid(hash common.Hash) bool {
-	return fmt.Sprintf("%x", hash[0]) == "0" &&
-		fmt.Sprintf("%x", hash[1]) == "0" &&
-		fmt.Sprintf("%x", hash[2]) == "0" &&
-		fmt.Sprintf("%x", hash[3]) != "0"
 }

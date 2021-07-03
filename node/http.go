@@ -2,21 +2,14 @@ package node
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	dto "github.com/prometheus/client_model/go"
-	"github.com/prometheus/prom2json"
 	"github.com/rovergulf/rbn/core"
-	"github.com/rovergulf/rbn/pkg/version"
 	"github.com/rovergulf/rbn/wallets"
 	"net/http"
-	"strings"
-	"time"
 )
 
 func (n *Node) serveHttp() error {
@@ -51,89 +44,6 @@ func (n *Node) serveHttp() error {
 	return http.ListenAndServe(n.metadata.ApiAddress(), &n.httpHandler)
 }
 
-func (n *Node) healthCheck(w http.ResponseWriter, r *http.Request) {
-	n.httpResponse(w, map[string]interface{}{
-		"http_status": http.StatusOK,
-		"timestamp":   time.Now().Unix(),
-		"run_date":    version.RunDate.Format(time.RFC1123),
-		"node_status": "healthy",
-		"is_mining":   n.isMining,
-	})
-}
-
-func (n *Node) DiscoverMetrics(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	metricsUrl := fmt.Sprintf("%s/metrics", n.metadata.HttpApiAddress())
-	req, err := http.Get(metricsUrl)
-	if err != nil {
-		n.logger.Errorf("Unable to send request to prometheus metrics: %s", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		n.httpResponse(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	mfChan := make(chan *dto.MetricFamily, 1024)
-
-	// Missing input means we are reading from an URL.
-	if err := prom2json.ParseReader(req.Body, mfChan); err != nil {
-		n.logger.Errorf("error reading metrics: %s", err)
-		n.httpResponse(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	var result []*prom2json.Family
-	for mf := range mfChan {
-		result = append(result, prom2json.NewFamily(mf))
-	}
-
-	n.httpResponse(w, result)
-}
-
-func (n *Node) WalkRoutes(w http.ResponseWriter, r *http.Request) {
-	var results []map[string]interface{}
-
-	err := n.httpHandler.router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
-		res := make(map[string]interface{})
-
-		pathTemplate, err := route.GetPathTemplate()
-		if err == nil {
-			//h.Logger.Debug("ROUTE: ", pathTemplate)
-			res["route"] = pathTemplate
-		}
-		pathRegexp, err := route.GetPathRegexp()
-		if err == nil {
-			//h.Logger.Debug("Path regexp: ", pathRegexp)
-			res["regexp"] = pathRegexp
-		}
-		queriesTemplates, err := route.GetQueriesTemplates()
-		if err == nil {
-			//h.Logger.Debug("Queries templates: ", strings.Join(queriesTemplates, ","))
-			res["queries_templates"] = strings.Join(queriesTemplates, ",")
-		}
-		queriesRegexps, err := route.GetQueriesRegexp()
-		if err == nil {
-			//h.Logger.Debug("Queries regexps: ", strings.Join(queriesRegexps, ","))
-			res["queries_regexps"] = strings.Join(queriesRegexps, ",")
-		}
-		methods, err := route.GetMethods()
-		if err == nil {
-			//h.Logger.Debug("Methods: ", strings.Join(methods, ","))
-			res["methods"] = methods
-		}
-
-		results = append(results, res)
-		return nil
-	})
-	if err != nil {
-		n.logger.Error(err)
-	}
-
-	n.httpResponse(w, results)
-}
-
 func (n *Node) nodeInfo(w http.ResponseWriter, r *http.Request) {
 	//ctx := r.Context()
 	lb, err := n.bc.GetBlock(n.bc.LastHash)
@@ -147,8 +57,7 @@ func (n *Node) nodeInfo(w http.ResponseWriter, r *http.Request) {
 	nLsm, nVlog := n.db.Size()
 	result := StatusRes{
 		LastHash:   lb.Hash.Hex(),
-		Number:     n.bc.ChainLength.Uint64(),
-		KnownPeers: n.knownPeers,
+		KnownPeers: n.knownPeers.peers,
 		PendingTXs: n.pendingTXs,
 		IsMining:   n.isMining,
 		DbSize: map[string]int64{
@@ -189,8 +98,6 @@ func (n *Node) SyncPeers(w http.ResponseWriter, r *http.Request) {
 
 func (n *Node) ListBalances(w http.ResponseWriter, r *http.Request) {
 	//ctx := r.Context()
-	n.logger.Debug("http server ListBalances called")
-
 	balances, err := n.bc.ListBalances()
 	if err != nil {
 		n.httpResponse(w, err, http.StatusInternalServerError)
@@ -210,7 +117,9 @@ func (n *Node) GetBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	balance, err := n.bc.GetBalance(common.HexToAddress(addr))
+	address := common.HexToAddress(addr)
+
+	balance, err := n.bc.GetBalance(address)
 	if err != nil {
 		n.httpResponse(w, err, http.StatusBadRequest)
 		return
@@ -249,27 +158,21 @@ func (n *Node) txAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := tx.SetHash(); err != nil {
+	txHash, err := tx.Hash()
+	if err != nil {
 		n.logger.Errorf("Unable to set transaction hash: %s", err)
 		n.httpResponse(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	storedKey, err := n.wm.FindAccountKey(from)
+	wallet, err := n.wm.GetWallet(from, req.FromPwd)
 	if err != nil {
 		n.logger.Errorf("Unable to find stored account key: %s", err)
 		n.httpResponse(w, err, http.StatusBadRequest)
 		return
 	}
 
-	key, err := keystore.DecryptKey(storedKey, req.FromPwd)
-	if err != nil {
-		n.logger.Errorf("Unable to find stored account key: %s", err)
-		n.httpResponse(w, err, http.StatusBadRequest)
-		return
-	}
-
-	signedTx, err := wallets.NewSignedTx(tx, key.PrivateKey)
+	signedTx, err := wallets.NewSignedTx(tx, wallet.GetKey().PrivateKey)
 	if err != nil {
 		n.logger.Errorf("Unable to sign tx: %s", err)
 		n.httpResponse(w, err, http.StatusInternalServerError)
@@ -283,7 +186,7 @@ func (n *Node) txAdd(w http.ResponseWriter, r *http.Request) {
 	}
 
 	n.httpResponse(w, map[string]interface{}{
-		"tx_hash": tx.Hash,
+		"tx_hash": common.BytesToHash(txHash).String(),
 	})
 }
 
@@ -297,7 +200,7 @@ func (n *Node) txFind(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hash := common.HexToHash(hashVar)
-	if bytes.Compare(hash.Bytes(), common.Hash{}.Bytes()) == 0 {
+	if bytes.Compare(hash.Bytes(), common.HexToHash("").Bytes()) == 0 {
 		n.httpResponse(w, fmt.Errorf("invalid hash"), http.StatusBadRequest)
 		return
 	}
