@@ -1,0 +1,98 @@
+package core
+
+import (
+	"context"
+	"github.com/dgraph-io/badger/v3"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/spf13/viper"
+)
+
+func (bc *Blockchain) NewGenesisBlockWithRewrite(ctx context.Context) error {
+	gen := genesisByNetworkId(viper.GetString("network.id"))
+
+	genSerialized, err := gen.Serialize()
+	if err != nil {
+		bc.logger.Errorf("Unable to marshal genesis: %s", err)
+		return err
+	}
+
+	genesisBlock, err := gen.ToBlock()
+	if err != nil {
+		return err
+	}
+
+	serializedBLock, err := genesisBlock.Serialize()
+	if err != nil {
+		bc.logger.Errorf("Unable to serialize genesis block: %s", err)
+		return err
+	}
+
+	return bc.db.Update(func(txn *badger.Txn) error {
+		if err := txn.Set([]byte("g"), genSerialized); err != nil {
+			bc.logger.Errorf("Unable to save genesis value: %s", err)
+			return err
+		}
+
+		if err := txn.Set(genesisBlock.Hash.Bytes(), serializedBLock); err != nil {
+			bc.logger.Errorf("Unable to put genesis block: %s", err)
+			return err
+		}
+
+		if err := txn.Set([]byte("lh"), genesisBlock.Hash.Bytes()); err != nil {
+			bc.logger.Errorf("Unable to put genesis block hash: %s", err)
+			return err
+		}
+
+		for addr := range gen.Alloc {
+			genAcc := gen.Alloc[addr]
+
+			bal := Balance{
+				Address: common.Address{},
+				Balance: genAcc.Balance,
+				Nonce:   0,
+			}
+
+			balanceEncoded, err := bal.Serialize()
+			if err != nil {
+				return err
+			}
+
+			balanceKey := append(balancesPrefix, addr.Bytes()...)
+			if err := txn.Set(balanceKey, balanceEncoded); err != nil {
+				bc.logger.Errorf("Unable to save balance: %s", err)
+				return err
+			}
+		}
+
+		bc.genesis = gen
+		bc.LastHash = genesisBlock.Hash
+		return nil
+	})
+}
+
+func (bc *Blockchain) loadGenesis(ctx context.Context) error {
+	return bc.db.View(func(txn *badger.Txn) error {
+		lh, err := txn.Get([]byte("g"))
+		if err != nil {
+			// is it ok??
+			if err == badger.ErrKeyNotFound {
+				return bc.NewGenesisBlockWithRewrite(ctx)
+			}
+			bc.logger.Errorf("Unable to load genesis from storage: %s", err)
+			return err
+		}
+
+		return lh.Value(func(val []byte) error {
+			return bc.genesis.Deserialize(val)
+		})
+	})
+}
+
+func (bc *Blockchain) GetGenesis() (*Genesis, error) {
+	if bc.genesis == nil {
+		if err := bc.loadGenesis(context.Background()); err != nil {
+			return nil, err
+		}
+	}
+	return bc.genesis, nil
+}

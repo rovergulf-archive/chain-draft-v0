@@ -12,7 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
-	"github.com/rovergulf/rbn/core"
+	"github.com/rovergulf/rbn/core/types"
 	"github.com/tyler-smith/go-bip39"
 )
 
@@ -23,7 +23,6 @@ func init() {
 type Wallet struct {
 	Auth    string `json:"auth" yaml:"auth"`
 	KeyData []byte `json:"-" yaml:"-"` // stores encrypted key
-	Crypto  keystore.CryptoJSON
 	key     *keystore.Key
 }
 
@@ -42,7 +41,7 @@ func (w *Wallet) Deserialize(data []byte) error {
 	return decoder.Decode(w)
 }
 
-func (w *Wallet) SignTx(tx *core.Transaction) (*core.SignedTx, error) {
+func (w *Wallet) SignTx(tx *types.Transaction) (*types.SignedTx, error) {
 	if w.key == nil {
 		return nil, fmt.Errorf("wallet is locked")
 	}
@@ -57,7 +56,7 @@ func (w *Wallet) SignTx(tx *core.Transaction) (*core.SignedTx, error) {
 		return nil, err
 	}
 
-	return &core.SignedTx{
+	return &types.SignedTx{
 		Transaction: *tx,
 		Sig:         sig,
 	}, nil
@@ -91,7 +90,7 @@ func (w *Wallet) EncryptKey() error {
 	return nil
 }
 
-func SignTx(tx core.Transaction, privKey *ecdsa.PrivateKey) ([]byte, error) {
+func SignTx(tx types.Transaction, privKey *ecdsa.PrivateKey) ([]byte, error) {
 	rawTx, err := tx.Serialize()
 	if err != nil {
 		return nil, err
@@ -105,13 +104,13 @@ func SignTx(tx core.Transaction, privKey *ecdsa.PrivateKey) ([]byte, error) {
 	return sig, nil
 }
 
-func NewSignedTx(tx core.Transaction, privKey *ecdsa.PrivateKey) (core.SignedTx, error) {
+func NewSignedTx(tx types.Transaction, privKey *ecdsa.PrivateKey) (types.SignedTx, error) {
 	sig, err := SignTx(tx, privKey)
 	if err != nil {
-		return core.SignedTx{}, nil
+		return types.SignedTx{}, nil
 	}
 
-	return core.SignedTx{
+	return types.SignedTx{
 		Transaction: tx,
 		Sig:         sig,
 	}, nil

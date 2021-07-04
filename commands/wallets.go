@@ -2,11 +2,14 @@ package commands
 
 import (
 	"fmt"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/console/prompt"
 	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/cobra"
 	"github.com/tyler-smith/go-bip39"
+	"io/ioutil"
+	"path"
 )
 
 func init() {
@@ -27,23 +30,21 @@ func walletsCmd() *cobra.Command {
 	walletsCmd.AddCommand(walletsUpdateAuthCmd())
 	walletsCmd.AddCommand(walletsListCmd())
 	walletsCmd.AddCommand(walletsPrintPrivKeyCmd())
+	//walletsCmd.AddCommand(walletsImportCmd())
 
 	return walletsCmd
 }
 
 func walletsListCmd() *cobra.Command {
 	var walletsListCmd = &cobra.Command{
-		Use:   "list",
-		Short: "Lists available wallet addresses.",
+		Use:     "list",
+		Short:   "Lists available wallet addresses.",
+		PreRunE: prepareWalletsManager,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts := getBlockchainConfig(cmd)
-			wm, err := wallets.NewManager(opts)
-			if err != nil {
-				return err
-			}
-			defer wm.Shutdown()
+			defer accountManager.Shutdown()
 
-			addresses, err := wm.GetAllAddresses()
+			addresses, err := accountManager.GetAllAddresses()
 			if err != nil {
 				return err
 			}
@@ -66,6 +67,8 @@ func walletsPrintPrivKeyCmd() *cobra.Command {
 		Use:   "print-pk",
 		Short: "Unlocks keystore file and prints the Private + Public keys.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			defer accountManager.Shutdown()
+
 			address, _ := cmd.Flags().GetString("address")
 			if !common.IsHexAddress(address) {
 				return fmt.Errorf("bad address format")
@@ -76,13 +79,7 @@ func walletsPrintPrivKeyCmd() *cobra.Command {
 				return err
 			}
 
-			wm, err := wallets.NewManager(getBlockchainConfig(cmd))
-			if err != nil {
-				return err
-			}
-			defer wm.Shutdown()
-
-			wallet, err := wm.GetWallet(common.HexToAddress(address), auth)
+			wallet, err := accountManager.GetWallet(common.HexToAddress(address), auth)
 			if err != nil {
 				logger.Errorf("Unable to get wallet: %s", err)
 				return err
@@ -101,14 +98,11 @@ func walletsPrintPrivKeyCmd() *cobra.Command {
 
 func walletsNewCmd() *cobra.Command {
 	var walletsNewCmd = &cobra.Command{
-		Use:   "new",
-		Short: "Creates a new wallet.",
+		Use:     "new",
+		Short:   "Creates a new wallet.",
+		PreRunE: prepareWalletsManager,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wm, err := wallets.NewManager(getBlockchainConfig(cmd))
-			if err != nil {
-				return err
-			}
-			defer wm.Shutdown()
+			defer accountManager.Shutdown()
 
 			useMnemonic, _ := cmd.Flags().GetBool("mnemonic")
 
@@ -140,7 +134,7 @@ func walletsNewCmd() *cobra.Command {
 				return err
 			}
 
-			wallet, err := wm.AddWallet(key, auth)
+			wallet, err := accountManager.AddWallet(key, auth)
 			if err != nil {
 				return err
 			}
@@ -161,11 +155,7 @@ func walletsUpdateAuthCmd() *cobra.Command {
 		Use:   "update",
 		Short: "Change wallet passphrase",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wm, err := wallets.NewManager(getBlockchainConfig(cmd))
-			if err != nil {
-				return err
-			}
-			defer wm.Shutdown()
+			defer accountManager.Shutdown()
 
 			flagAddr, _ := cmd.Flags().GetString("address")
 			if !common.IsHexAddress(flagAddr) {
@@ -205,13 +195,13 @@ func walletsUpdateAuthCmd() *cobra.Command {
 					"There is no way to recover it, but you can change it")
 			}
 
-			w, err := wm.GetWallet(addr, auth)
+			w, err := accountManager.GetWallet(addr, auth)
 			if err != nil {
 				logger.Errorf("Unable to get wallet: %s", err)
 				return err
 			}
 
-			if _, err := wm.AddWallet(w.GetKey(), newAuth); err != nil {
+			if _, err := accountManager.AddWallet(w.GetKey(), newAuth); err != nil {
 				return err
 			}
 
@@ -229,17 +219,51 @@ func walletsUpdateAuthCmd() *cobra.Command {
 }
 
 func walletsImportCmd() *cobra.Command {
-	var walletsImportCmd = &cobra.Command{
-		Use:   "import",
-		Short: "Import account key to keystore",
+	walletsRecoverCmd := &cobra.Command{
+		Use:     "import",
+		Short:   "Imports key from specified CryptoJSON file to keystore",
+		Long:    ``,
+		PreRunE: prepareWalletsManager,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TBD
+			//ctx, cancel := context.WithCancel(context.Background())
+			//defer cancel()
+			defer accountManager.Shutdown()
+
+			auth, err := getPassPhrase("Enter passphrase do decrypt wallet:", false)
+			if err != nil {
+				return err
+			}
+
+			filePath, _ := cmd.Flags().GetString("file")
+			if path.Ext(filePath) != ".json" {
+				return fmt.Errorf("file extension must be json")
+			}
+
+			data, err := ioutil.ReadFile(filePath)
+			if err != nil {
+				return err
+			}
+
+			key, err := keystore.DecryptKey(data, auth)
+			if err != nil {
+				return err
+			}
+
+			w, err := accountManager.AddWallet(key, auth)
+			if err != nil {
+				return err
+			}
+
+			logger.Info("Successfully imported '%s' account into keystore", w.Address())
 			return nil
 		},
 		TraverseChildren: true,
 	}
 
-	return walletsImportCmd
+	walletsRecoverCmd.Flags().StringP("file", "f", "", "Specify key file path to decode")
+	walletsRecoverCmd.MarkFlagRequired("file")
+
+	return walletsRecoverCmd
 }
 
 func getPassPhrase(message string, confirmation bool) (string, error) {

@@ -57,6 +57,10 @@ func (n *Node) doSync(ctx context.Context) {
 	}
 }
 
+func (n *Node) validateGenesis() error {
+	return fmt.Errorf("not implemented")
+}
+
 func (n *Node) joinKnownPeer(peer PeerNode) error {
 	return fmt.Errorf("not implemented")
 }

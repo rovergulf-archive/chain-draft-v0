@@ -38,12 +38,12 @@ func (i *BlockchainIterator) Next() (*Block, error) {
 		}
 
 		return item.Value(func(val []byte) error {
-			nextBlock, err := DeserializeBlock(val)
-			if err != nil {
+			var nextBlock Block
+			if err := nextBlock.Deserialize(val); err != nil {
 				i.logger.Errorf("Unable to deserialize block: %s", err)
 				return err
 			} else {
-				block = nextBlock
+				block = &nextBlock
 			}
 			return nil
 		})

@@ -9,13 +9,19 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - more `params` package constants, to be used in network consensus verification
+  and other places where constant values are important
 
 ### Changed
-- Chain genesis initialization now have hardcoded default values 
+- Chain Genesis initialization now have hardcoded default values
+- `core` logic now separated from its types, as it would represent database interface of blockchain
+- some of `core` package used types now moved to `types` subdirectory package
+- No etherium **Gas** naming, use **Nether** as the lowest denomination of **Rovergulf Native Token**
+- `address` flag usage for cli application would be optimized 
 
 ### Fixed
 
 ### Removed
+- `node-id` flag usage
 
 
 ## 3 Jul 2021

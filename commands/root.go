@@ -21,7 +21,7 @@ var (
 	logger           *zap.SugaredLogger
 	blockChain       *core.Blockchain
 	accountManager   *wallets.Manager
-	//node *node.Node
+	localNode        *node.Node
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -63,10 +63,10 @@ func init() {
 
 	// main flags
 	rootCmd.PersistentFlags().StringVar(&dataDir, "data_dir", os.Getenv("DATA_DIR"), "Blockchain data directory")
-	rootCmd.PersistentFlags().StringVar(&dataDir, "network.id", params.MainNetworkId, "Chain network id")
+	rootCmd.PersistentFlags().StringVar(&dataDir, "network_id", params.MainNetworkId, "Chain network id")
 
 	// bind viper values
-	bindViperPersistentFlag(rootCmd, "network.id", "network-id")
+	bindViperPersistentFlag(rootCmd, "network.id", "network_id")
 	bindViperPersistentFlag(rootCmd, "app.dev", "dev")
 	bindViperPersistentFlag(rootCmd, "log_json", "log_json")
 	bindViperPersistentFlag(rootCmd, "log_level", "log_level")

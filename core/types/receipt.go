@@ -6,18 +6,20 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-// Receipt represents an
+// Receipt is an result of confirmed transaction
 type Receipt struct {
-	Addr common.Address `json:"addr" yaml:"addr"`
+	Addr common.Address `json:"addr" yaml:"addr" yaml:"addr"`
 
-	Balance         uint64         `json:"balance" yaml:"balance"`
-	ContractAddress common.Address `json:"contract_address"`
-	GasUsed         uint64         `json:"gas_used"`
+	Balance         uint64         `json:"balance" yaml:"balance" yaml:"balance"`
+	ContractAddress common.Address `json:"contract_address" yaml:"contract_address"` // TBD
 
-	BlockHash        common.Hash `json:"blockHash,omitempty"`
-	BlockNumber      uint64      `json:"block_number,omitempty"`
-	TxHash           common.Hash `json:"tx_hash"`
-	TransactionIndex uint        `json:"transaction_index"`
+	NetherUsed  uint64 `json:"nether_used" yaml:"nether_used"`
+	NetherPrice uint64 `json:"nether_price" yaml:"nether_price"`
+
+	BlockHash        common.Hash `json:"block_hash,omitempty" yaml:"block_hash"`
+	BlockNumber      uint64      `json:"block_number,omitempty" yaml:"block_number"`
+	TxHash           common.Hash `json:"tx_hash" yaml:"tx_hash"`
+	TransactionIndex int         `json:"transaction_index" yaml:"transaction_index"`
 }
 
 // Serialize serializes receipt

@@ -63,9 +63,9 @@ func blockchainListCmd() *cobra.Command {
 		Short:   "Lists all blocks.",
 		PreRunE: prepareBlockchain,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			defer blockChain.Shutdown()
 			maxLimit, _ := cmd.Flags().GetInt("limit")
 
-			defer blockChain.Shutdown()
 			bci := blockChain.Iterator()
 
 			var limit int

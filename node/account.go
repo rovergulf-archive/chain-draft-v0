@@ -12,6 +12,7 @@ func (n *Node) saveNodeAccount(w *wallets.Wallet) error {
 
 	data, err := w.Serialize()
 	if err != nil {
+		n.logger.Errorf("Unable to serialize node account: %s", err)
 		return err
 	}
 
@@ -26,6 +27,9 @@ func (n *Node) GetNodeAccount() (*wallets.Wallet, error) {
 	if err := n.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte("acc"))
 		if err != nil {
+			if err != badger.ErrKeyNotFound {
+				n.logger.Errorf("Unable to get node account: %s", err)
+			}
 			return err
 		}
 
@@ -33,10 +37,14 @@ func (n *Node) GetNodeAccount() (*wallets.Wallet, error) {
 			return w.Deserialize(val)
 		})
 	}); err != nil {
+		if err != badger.ErrKeyNotFound {
+			n.logger.Errorf("Unable to begin database read transaction: %s", err)
+		}
 		return nil, err
 	}
 
 	if err := w.Open(); err != nil {
+		n.logger.Errorf("Unable to open node account key: %s", err)
 		return nil, err
 	}
 
@@ -49,23 +57,30 @@ func (n *Node) setupNodeAccount() error {
 		if err == badger.ErrKeyNotFound {
 			passphrase, err := wallets.NewRandomMnemonic()
 			if err != nil {
+				n.logger.Errorf("Unable to generate mnemonic pasphrase")
 				return err
 			}
+
 			key, err := wallets.NewRandomKey()
 			if err != nil {
 				return err
 			}
+
 			newWallet, err := n.wm.AddWallet(key, passphrase)
 			if err != nil {
+				n.logger.Errorf("Unable to save node account to keystore: %s", err)
 				return err
 			}
 
 			if err := n.saveNodeAccount(newWallet); err != nil {
+				n.logger.Errorf("Unable to save node account to node storage: %s", err)
 				return err
 			}
+
 			w = newWallet
+		} else {
+			return err
 		}
-		return err
 	}
 
 	n.account = w

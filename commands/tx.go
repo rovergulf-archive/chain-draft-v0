@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/console/prompt"
-	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/node"
 	"github.com/rovergulf/rbn/proto"
-	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -27,58 +25,27 @@ func txCmd() *cobra.Command {
 		TraverseChildren: true,
 	}
 
-	txCmd.AddCommand(txReindexTxCmd())
 	txCmd.AddCommand(txSendCmd())
 	txCmd.AddCommand(txGetCmd())
 
 	return txCmd
 }
 
-// txReindexTxCmd represents the reindex command
-func txReindexTxCmd() *cobra.Command {
-	var txReindexTxCmd = &cobra.Command{
-		Use:   "reindex",
-		Short: "Re-index transactions",
-		Long:  ``,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			bc, err := core.ContinueBlockchain(getBlockchainConfig(cmd))
-			if err != nil {
-				logger.Warnf("Unable to start blockchain: %s", err)
-				return err
-			}
-			defer bc.Shutdown()
-
-			var count int
-			logger.Infof("Done! There are %d transactions in the UTXO set.", count)
-
-			return nil
-		},
-		TraverseChildren: true,
-	}
-
-	return txReindexTxCmd
-}
-
 // txGetCmd represents the reindex command
 func txGetCmd() *cobra.Command {
 	var txGetCmd = &cobra.Command{
-		Use:   "get",
-		Short: "Describe transaction by id",
-		Long:  ``,
+		Use:     "get",
+		Short:   "Describe transaction by id",
+		Long:    ``,
+		PreRunE: prepareBlockchain,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			defer blockChain.Shutdown()
 			id, err := cmd.Flags().GetString("id")
 			if err != nil {
 				return err
 			}
 
-			bc, err := core.ContinueBlockchain(getBlockchainConfig(cmd))
-			if err != nil {
-				logger.Warnf("Unable to start blockchain: %s", err)
-				return err
-			}
-			defer bc.Shutdown()
-
-			tx, err := bc.FindTransaction([]byte(id))
+			tx, err := blockChain.FindTransaction([]byte(id))
 			if err != nil {
 				return err
 			}
@@ -129,25 +96,10 @@ func txSendCmd() *cobra.Command {
 				return fmt.Errorf("amount must be more than 0")
 			}
 
-			opts := getBlockchainConfig(cmd)
-
 			auth, err := prompt.Stdin.PromptPassword("Enter passphrase to decrypt wallet:")
 			if err != nil {
 				return err
 			}
-
-			bc, err := core.ContinueBlockchain(opts)
-			if err != nil {
-				logger.Error("Unable to start blockchain: %s", err)
-				return err
-			}
-			defer bc.Shutdown()
-
-			wm, err := wallets.NewManager(opts)
-			if err != nil {
-				return err
-			}
-			defer wm.Shutdown()
 
 			client, err := node.NewClient(ctx, logger, viper.GetString("network.addr"))
 			if err != nil {

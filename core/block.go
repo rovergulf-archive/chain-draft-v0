@@ -12,22 +12,22 @@ var (
 	blocksPrefixLength = len(blocksPrefix)
 )
 
-// Block represents
-type Block struct {
-	types.BlockHeader
-	Transactions []SignedTx `json:"transactions" yaml:"transactions"`
-
-	size int64
-
-	ReceivedAt int64 `json:"received_at" yaml:"received_at"`
-}
-
 // NewBlock creates and returns Block
-func NewBlock(header types.BlockHeader, txs []SignedTx) *Block {
+func NewBlock(header types.BlockHeader, txs []types.SignedTx) *Block {
 	return &Block{
 		BlockHeader:  header,
 		Transactions: txs,
 	}
+}
+
+// Block represents Blockchain state change interface
+type Block struct {
+	types.BlockHeader
+	Transactions []types.SignedTx `json:"transactions" yaml:"transactions"`
+
+	//size int64
+
+	//ReceivedAt int64 `json:"received_at" yaml:"received_at"`
 }
 
 // SetHash sets a hash of the block

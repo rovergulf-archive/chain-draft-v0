@@ -15,8 +15,6 @@ type Balance struct {
 	Address common.Address `json:"address" yaml:"address"`
 	Balance uint64         `json:"balance" yaml:"balance"`
 	Nonce   uint64         `json:"nonce" yaml:"nonce"`
-	Symbol  string         `json:"symbol" yaml:"symbol"`
-	Units   string         `json:"units" yaml:"units"`
 }
 
 func (b *Balance) Serialize() ([]byte, error) {

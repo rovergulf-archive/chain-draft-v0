@@ -1,7 +1,5 @@
 package database
 
-import "github.com/rovergulf/rbn/core"
-
 const (
 	Badger = "badger"
 	Dgraph = "dgraph"
@@ -19,19 +17,12 @@ type Config struct {
 
 // ChainBackend represents multiple drivers storage interface for core.Blockchain
 type ChainBackend interface {
-	GetGenesis() (*core.Genesis, error)
-	LatestBlock() (*core.Block, error)
-	AddBlock(key string, block core.Block) error
-	GetBlock(key string) (*core.Block, error)
-	GetBlocks() ([]*core.Block, error)
-	SaveTransaction(txHash []byte, data []byte) error
-	FindTransaction(txHash []byte) (*core.SignedTx, error)
-	ListTransactions() ([]*core.SignedTx, error)
+}
 
-	Shutdown()
+// KeystoreBackend represents account's private key storage
+type KeystoreBackend interface {
 }
 
 // NodeBackend represents RBN node.Node backend
 type NodeBackend interface {
-	Shutdown()
 }

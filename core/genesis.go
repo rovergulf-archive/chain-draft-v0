@@ -3,22 +3,16 @@ package core
 import (
 	"bytes"
 	"encoding/gob"
-	"encoding/json"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rovergulf/rbn/core/types"
 	"github.com/rovergulf/rbn/params"
 	"time"
 )
 
-var genesisSymbols = map[string]bool{
-	"RBN":  true, // dev unit
-	"Gulf": true,
-}
-
 type Genesis struct {
 	ChainId     string         `json:"chain_id" yaml:"chain_id"`
 	GenesisTime int64          `json:"genesis_time" yaml:"genesis_time"`
-	GasLimit    uint64         `json:"gas_limit" yaml:"gas_limit"`
+	NetherLimit uint64         `json:"nether_limit" yaml:"nether_limit"`
 	Nonce       uint64         `json:"nonce" yaml:"nonce"`
 	Coinbase    common.Address `json:"coinbase" yaml:"coinbase"`
 	Symbol      string         `json:"symbol" yaml:"symbol"`
@@ -33,10 +27,10 @@ func DevNetGenesis() *Genesis {
 	return &Genesis{
 		ChainId:     params.OpenDevNetworkId,
 		GenesisTime: 1625300000,
-		GasLimit:    4800,
+		NetherLimit: 21000,
 		Nonce:       0,
 		Coinbase:    common.Address{},
-		Symbol:      "DevCoin",
+		Symbol:      "Nether",
 		Units:       "Wei", // in favor of Etherium native denomination
 		ParentHash:  common.Hash{},
 		Alloc:       developerNetAlloc(),
@@ -49,11 +43,11 @@ func DefaultMainNetGenesis() *Genesis {
 	return &Genesis{
 		ChainId:     params.MainNetworkId,
 		GenesisTime: 1625319335,
-		GasLimit:    4800,
+		NetherLimit: 21000, // 6942000
 		Nonce:       0,
 		Coinbase:    common.Address{},
-		Symbol:      "Gulf", //
-		Units:       "Ore",  //
+		Symbol:      "RNT",    //
+		Units:       "Nether", //
 		ParentHash:  common.Hash{},
 		Alloc:       defaultMainNetAlloc(),
 		ExtraData:   []byte("0x00000000000000000000000000000000000000"),
@@ -77,21 +71,17 @@ func (g *Genesis) Deserialize(data []byte) error {
 	return decoder.Decode(g)
 }
 
-func (g *Genesis) MarshalJSON() ([]byte, error) {
-	return json.Marshal(*g)
-}
-
 func (g *Genesis) ToBlock() (*Block, error) {
-	var txs []SignedTx
+	var txs []types.SignedTx
 
 	for addr := range g.Alloc {
 		coinbase := g.Alloc[addr]
-		tx, err := NewTransaction(g.Coinbase, addr, coinbase.Balance, 0, g.ExtraData)
+		tx, err := NewTransaction(g.Coinbase, addr, coinbase.Balance, 0, g.NetherLimit, params.NetherPrice, g.ExtraData)
 		if err != nil {
 			return nil, err
 		}
 
-		txs = append(txs, SignedTx{Transaction: tx})
+		txs = append(txs, types.SignedTx{Transaction: tx})
 	}
 
 	header := types.BlockHeader{

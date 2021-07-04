@@ -7,14 +7,16 @@ import (
 )
 
 // BlockHeader represents header part of chain block
-//
 type BlockHeader struct {
-	Root        common.Hash    `json:"root" yaml:"root"`
-	PrevHash    common.Hash    `json:"prev_hash" yaml:"prev_hash"`
-	Hash        common.Hash    `json:"hash" yaml:"hash"`
-	ReceiptHash common.Hash    `json:"receipt_hash" yaml:"receipt_hash"`
-	Number      uint64         `json:"number" yaml:"number"`
-	Timestamp   int64          `json:"timestamp" yaml:"timestamp"`
+	Root      common.Hash `json:"root" yaml:"root"`
+	PrevHash  common.Hash `json:"prev_hash" yaml:"prev_hash"`
+	Hash      common.Hash `json:"hash" yaml:"hash"`
+	Number    uint64      `json:"number" yaml:"number"`
+	Timestamp int64       `json:"timestamp" yaml:"timestamp"`
+
+	ReceiptHash common.Hash    `json:"receipts_hash" yaml:"receipts_hash"`
+	TxHash      common.Hash    `json:"txs_hash" yaml:"txs_hash"`
+	NetherUsed  uint64         `json:"nether_used" yaml:"nether_used"`
 	Coinbase    common.Address `json:"coinbase" yaml:"coinbase"` // validator node address
 }
 

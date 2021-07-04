@@ -2,9 +2,7 @@ package commands
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"github.com/ethereum/go-ethereum/console/prompt"
 	"github.com/rovergulf/rbn/node"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -31,6 +29,7 @@ func nodeCmd() *cobra.Command {
 	nodeCmd.AddCommand(nodeRunCmd())
 	nodeCmd.AddCommand(nodeStopCmd())
 	nodeCmd.AddCommand(nodeAccountDumpCmd())
+	nodeCmd.AddCommand(nodeAccountDumpCmd())
 
 	return nodeCmd
 }
@@ -39,28 +38,16 @@ func nodeRunCmd() *cobra.Command {
 	var nodeRunCmd = &cobra.Command{
 		Use:   "run",
 		Short: "Run Rovergulf Blockchain Network peer node",
-		Long:  ``,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-
-			addr, _ := cmd.Flags().GetString("address")
-
-			if len(addr) > 0 {
-				auth, err := prompt.Stdin.PromptPassword("Enter passphrase do decrypt miner wallet:")
-				if err != nil {
-					return err
-				}
-
-				viper.Set("auth", auth)
-			}
 
 			n, err := node.New(getBlockchainConfig(cmd))
 			if err != nil {
 				return err
 			}
 
-			if err := n.Init(); err != nil {
+			if err := n.Init(ctx); err != nil {
 				return err
 			}
 
@@ -69,22 +56,21 @@ func nodeRunCmd() *cobra.Command {
 		TraverseChildren: true,
 	}
 
-	nodeRunCmd.Flags().StringP("address", "a", "", "Node account address")
-
-	// node
-	nodeRunCmd.Flags().String("miner", "", "Specify miner account")
-
-	nodeRunCmd.Flags().String("net-addr", "127.0.0.1:9420", "Network discovery address")
-	bindViperFlag(nodeRunCmd, "network.addr", "net-addr")
-
+	// gRPC
 	nodeRunCmd.Flags().String("node-addr", "127.0.0.1", "Node address would listen to")
 	bindViperFlag(nodeRunCmd, "node.addr", "node-addr")
-	nodeRunCmd.Flags().Int("node-port", 9420, "Node port would listen to")
+	nodeRunCmd.Flags().Int("node-port", 9420, "Node port would listen to accept gRPC connections")
 	bindViperFlag(nodeRunCmd, "node.port", "node-port")
+	// HTTP REST
 	nodeRunCmd.Flags().String("http-addr", "127.0.0.1", "Node address would listen to")
 	bindViperFlag(nodeRunCmd, "http.addr", "http-addr")
-	nodeRunCmd.Flags().Int("http-port", 9469, "Node port would listen to")
+	nodeRunCmd.Flags().Int("http-port", 9469, "Node port would listen to accept Web API Requests")
 	bindViperFlag(nodeRunCmd, "http.port", "http-port")
+	// JSONRpc 2.0 – TBD
+	//nodeRunCmd.Flags().String("jrpc-addr", "127.0.0.1", "Node address would listen to")
+	//bindViperFlag(nodeRunCmd, "jrpc.addr", "jrpc-addr")
+	//nodeRunCmd.Flags().Int("jrpc-port", 9300, "Node port for JSON Rpc 2.0 Interface")
+	//bindViperFlag(nodeRunCmd, "jrpc.port", "jrpc-port")
 
 	return nodeRunCmd
 }
@@ -134,16 +120,11 @@ func nodeAccountDumpCmd() *cobra.Command {
 		Short: "Export node account key",
 		Long:  ``,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			n, err := node.New(getBlockchainConfig(cmd))
-			if err != nil {
-				return err
-			}
+			//ctx, cancel := context.WithCancel(context.Background())
+			//defer cancel()
+			defer localNode.Shutdown()
 
-			if err := n.Init(); err != nil {
-				return err
-			}
-
-			w, err := n.GetNodeAccount()
+			w, err := localNode.GetNodeAccount()
 			if err != nil {
 				return err
 			}
@@ -154,61 +135,12 @@ func nodeAccountDumpCmd() *cobra.Command {
 			}
 
 			if err := ioutil.WriteFile(filePath, w.KeyData, 0755); err != nil {
-				return err
-			}
-
-			fmt.Println(len(w.KeyData))
-			if err := json.Unmarshal(w.KeyData, &w.Crypto); err != nil {
 				return err
 			}
 
 			return writeOutput(cmd, map[string]interface{}{
 				"address": w.Address(),
 				"auth":    w.Auth,
-			})
-		},
-		TraverseChildren: true,
-	}
-
-	nodeAccountDumpCmd.Flags().StringP("file", "f", "", "Specify key file path to write")
-	nodeAccountDumpCmd.MarkFlagRequired("file")
-
-	return nodeAccountDumpCmd
-}
-
-func nodeAccountRecoverCmd() *cobra.Command {
-	nodeAccountDumpCmd := &cobra.Command{
-		Use:   "account-recover",
-		Short: "Import node account key",
-		Long:  ``,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			n, err := node.New(getBlockchainConfig(cmd))
-			if err != nil {
-				return err
-			}
-
-			if err := n.Init(); err != nil {
-				return err
-			}
-
-			w, err := n.GetNodeAccount()
-			if err != nil {
-				return err
-			}
-
-			filePath, _ := cmd.Flags().GetString("file")
-			if path.Ext(filePath) != ".json" {
-				return fmt.Errorf("file extension must be json")
-			}
-
-			if err := ioutil.WriteFile(filePath, w.KeyData, 0755); err != nil {
-				return err
-			}
-
-			return writeOutput(cmd, map[string]interface{}{
-				"address":    w.Address(),
-				"auth":       w.Auth,
-				"cryptoJson": filePath,
 			})
 		},
 		TraverseChildren: true,

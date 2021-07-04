@@ -58,10 +58,10 @@ type Node struct {
 
 	knownPeers knownPeers
 
-	pendingTXs map[common.Hash]core.SignedTx
+	pendingTXs map[common.Hash]types.SignedTx
 
 	newSyncBlocks chan core.Block
-	newSyncTXs    chan core.SignedTx
+	newSyncTXs    chan types.SignedTx
 
 	raftStorage *raft.MemoryStorage
 	//Lock *sync.RWMutex
@@ -97,8 +97,8 @@ func New(opts params.Options) (*Node, error) {
 			},
 			lock: new(sync.RWMutex),
 		},
-		pendingTXs:    make(map[common.Hash]core.SignedTx),
-		newSyncTXs:    make(chan core.SignedTx),
+		pendingTXs:    make(map[common.Hash]types.SignedTx),
+		newSyncTXs:    make(chan types.SignedTx),
 		newSyncBlocks: make(chan core.Block),
 		//Lock:       new(sync.RWMutex),
 	}
@@ -115,10 +115,9 @@ func New(opts params.Options) (*Node, error) {
 	return n, nil
 }
 
-func (n *Node) Init() error {
-
+func (n *Node) Init(ctx context.Context) error {
 	sigutil.ListenExit(func(signal os.Signal) {
-		n.logger.Warnf("Signal [%s] received. Graceful shutdown", signal)
+		n.logger.Warnf("Signal [%s] received. Graceful shutdown initialized.", signal)
 		time.AfterFunc(15*time.Second, func() {
 			n.logger.Fatal("Failed to gracefully shutdown after 15 sec. Force exit")
 		})
@@ -132,12 +131,17 @@ func (n *Node) Init() error {
 	}
 	n.db = db
 
-	chain, err := core.ContinueBlockchain(n.config)
+	chain, err := core.NewBlockchain(n.config)
 	if err != nil {
 		n.logger.Errorf("Unable to continue blockchain: %s", err)
 		return err
 	} else {
 		n.bc = chain
+	}
+
+	if err := chain.Run(ctx); err != nil {
+		n.logger.Errorf("Unable to continue blockchain: %s", err)
+		return err
 	}
 
 	n.wm, err = wallets.NewManager(n.config)
@@ -318,7 +322,7 @@ func (n *Node) race(ctx context.Context) {
 
 					miningCtx, stopCurrentMining = context.WithCancel(ctx)
 					// TODO rename
-					if err := n.minePendingTXs(miningCtx); err != nil {
+					if err := n.generateBlock(miningCtx); err != nil {
 						n.logger.Errorf("Failed to mine pending txs: %s", err)
 					}
 
@@ -330,7 +334,7 @@ func (n *Node) race(ctx context.Context) {
 			n.logger.Debugw("Proposed block appeared", "is_mining", n.isMining)
 			if n.isMining {
 				n.logger.Warnf("Peer mined next Block '%s' faster :(", block.Hash.Hex())
-				n.removeMinedPendingTXs(&block)
+				n.removeAppliedPendingTXs(&block)
 				stopCurrentMining()
 			}
 
@@ -342,12 +346,12 @@ func (n *Node) race(ctx context.Context) {
 	}
 }
 
-func (n *Node) minePendingTXs(ctx context.Context) error {
+func (n *Node) generateBlock(ctx context.Context) error {
 	if len(n.pendingTXs) == 0 {
 		return fmt.Errorf("no transactions available")
 	}
 
-	var txs []core.SignedTx
+	var txs []types.SignedTx
 
 	for i := range n.pendingTXs {
 		tx := n.pendingTXs[i]
@@ -371,16 +375,16 @@ func (n *Node) minePendingTXs(ctx context.Context) error {
 		return err
 	}
 
-	n.removeMinedPendingTXs(newBlock)
-
 	if err := n.bc.AddBlock(newBlock); err != nil {
 		return err
 	}
 
+	n.removeAppliedPendingTXs(newBlock)
+
 	return nil
 }
 
-func (n *Node) removeMinedPendingTXs(block *core.Block) {
+func (n *Node) removeAppliedPendingTXs(block *core.Block) {
 	if len(block.Transactions) > 0 && len(n.pendingTXs) > 0 {
 		n.logger.Info("Updating in-memory Pending TXs Pool:")
 	}
@@ -400,7 +404,8 @@ func (n *Node) removeMinedPendingTXs(block *core.Block) {
 		}
 	}
 }
-func (n *Node) AddPendingTX(tx core.SignedTx, peer PeerNode) error {
+
+func (n *Node) AddPendingTX(tx types.SignedTx, peer PeerNode) error {
 	ok, err := tx.IsAuthentic()
 	if err != nil {
 		return err

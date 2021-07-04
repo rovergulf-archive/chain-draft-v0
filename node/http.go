@@ -151,7 +151,7 @@ func (n *Node) txAdd(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nonce := n.bc.GetNextAccountNonce(from)
-	tx, err := core.NewTransaction(from, common.HexToAddress(req.To), req.Value, nonce, req.Data)
+	tx, err := core.NewTransaction(from, common.HexToAddress(req.To), req.Value, nonce, 0, 0, req.Data)
 	if err != nil {
 		n.logger.Errorf("Unable to create new transaction: %s", err)
 		n.httpResponse(w, err, http.StatusBadRequest)

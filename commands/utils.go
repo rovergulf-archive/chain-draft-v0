@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/node"
@@ -48,6 +49,20 @@ func prepareWalletsManager(cmd *cobra.Command, args []string) error {
 	}
 
 	accountManager = wm
+	return nil
+}
+
+func prepareNode(cmd *cobra.Command, args []string) error {
+	n, err := node.New(getBlockchainConfig(cmd))
+	if err != nil {
+		return err
+	}
+
+	if err := n.Init(context.Background()); err != nil {
+		return err
+	}
+
+	localNode = n
 	return nil
 }
 

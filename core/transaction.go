@@ -1,13 +1,10 @@
 package core
 
 import (
-	"bytes"
-	"crypto/elliptic"
-	"crypto/sha256"
-	"encoding/gob"
 	"fmt"
+	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/rovergulf/rbn/core/types"
 	"time"
 )
 
@@ -17,99 +14,129 @@ const (
 )
 
 var (
-	txRewardData   = []byte("reward")
 	txPrefix       = []byte("tx/")
 	txPrefixLength = len(txPrefix)
 )
 
-// Transaction represents a Bitcoin transaction
-type Transaction struct {
-	From     common.Address `json:"from" yaml:"from"`
-	To       common.Address `json:"to" yaml:"to"` // destination of contract, use empty address for contract creation
-	Nonce    uint64         `json:"nonce" yaml:"nonce"`
-	Value    uint64         `json:"value" yaml:"value"`
-	Gas      uint64         `json:"gas" yaml:"gas"`
-	GasPrice uint64         `json:"gas_price" yaml:"gas_price"`
-	Data     []byte         `json:"data" yaml:"data"` // contract data
-	Time     int64          `json:"time" yaml:"time"`
-}
-
-// Hash returns a hash of the transaction
-func (tx *Transaction) Hash() ([]byte, error) {
-	txCopy := *tx
-
-	serializedCopy, err := txCopy.Serialize()
-	if err != nil {
-		return nil, err
-	}
-
-	hash := sha256.Sum256(serializedCopy)
-	return hash[:], nil
-}
-
-// Serialize encodes Transaction with gob encoder
-func (tx Transaction) Serialize() ([]byte, error) {
-	var encoded bytes.Buffer
-
-	enc := gob.NewEncoder(&encoded)
-	if err := enc.Encode(tx); err != nil {
-		return nil, err
-	}
-
-	return encoded.Bytes(), nil
-}
-
-// Deserialize decodes and returns valid Transaction
-func (tx *Transaction) Deserialize(data []byte) error {
-	decoder := gob.NewDecoder(bytes.NewReader(data))
-	return decoder.Decode(tx)
-}
-
 // NewTransaction creates a new transaction
-func NewTransaction(from, to common.Address, amount uint64, nonce uint64, data []byte) (Transaction, error) {
+func NewTransaction(from, to common.Address, amount uint64, nonce uint64, nether, netherPrice uint64, data []byte) (types.Transaction, error) {
 	if from == to {
-		return Transaction{}, fmt.Errorf("transaction cannot be sent to yourself")
+		return types.Transaction{}, fmt.Errorf("transaction cannot be sent to yourself")
 	}
 
-	return Transaction{
-		From:     from,
-		To:       to,
-		Value:    amount,
-		Nonce:    nonce,
-		Gas:      0,
-		GasPrice: 0,
-		Data:     data,
-		Time:     time.Now().Unix(),
+	return types.Transaction{
+		From:        from,
+		To:          to,
+		Value:       amount,
+		Nonce:       nonce,
+		Nether:      nether,
+		NetherPrice: netherPrice,
+		Data:        data,
+		Time:        time.Now().Unix(),
 	}, nil
 }
 
-func (tx *Transaction) IsReward() bool {
-	return bytes.Compare(tx.Data, txRewardData) == 0
-}
+func (bc *Blockchain) ListTransactions() ([]types.SignedTx, error) {
+	var txs []types.SignedTx
 
-func (tx *Transaction) Cost() uint64 {
-	return tx.Value + TxFee
-}
+	if err := bc.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = txPrefix
+		it := txn.NewIterator(opts)
+		defer it.Close()
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			var tx types.SignedTx
 
-type SignedTx struct {
-	Transaction
-	Sig []byte `json:"sig" yaml:"sig"`
-}
+			if err := item.Value(func(val []byte) error {
+				return tx.Deserialize(val)
+			}); err != nil {
+				return err
+			}
 
-func (t SignedTx) IsAuthentic() (bool, error) {
-	txHash, err := t.Transaction.Hash()
-	if err != nil {
-		return false, err
+			txs = append(txs, tx)
+		}
+		return nil
+	}); err != nil {
+		bc.logger.Errorw("Unable to iterate db view", "err", err)
+		return nil, err
 	}
 
-	recoveredPubKey, err := crypto.SigToPub(txHash, t.Sig)
-	if err != nil {
-		return false, err
+	return txs, nil
+}
+
+func (bc *Blockchain) FindTransaction(txId []byte) (*types.SignedTx, error) {
+	var tx types.SignedTx
+
+	if err := bc.db.View(func(txn *badger.Txn) error {
+		key := append(txPrefix, txId...)
+		item, err := txn.Get(key)
+		if err != nil {
+			return err
+		}
+
+		return item.Value(func(val []byte) error {
+			return tx.Deserialize(val)
+		})
+	}); err != nil {
+		return nil, err
 	}
 
-	recoveredPubKeyBytes := elliptic.Marshal(crypto.S256(), recoveredPubKey.X, recoveredPubKey.Y)
-	recoveredPubKeyBytesHash := crypto.Keccak256(recoveredPubKeyBytes[1:])
-	recoveredAccount := common.BytesToAddress(recoveredPubKeyBytesHash[12:])
+	return &tx, nil
+}
 
-	return recoveredAccount.Hex() == t.Transaction.From.Hex(), nil
+func (bc *Blockchain) SaveTx(txHash common.Hash, tx types.SignedTx) error {
+	encodedTx, err := tx.Serialize()
+	if err != nil {
+		return err
+	}
+
+	key := append(txPrefix, txHash.Bytes()...)
+	return bc.db.Update(func(txn *badger.Txn) error {
+		return txn.Set(key, encodedTx)
+	})
+}
+
+func (bc *Blockchain) ApplyTx(tx types.SignedTx) error {
+	fromAddr, err := bc.GetBalance(tx.From)
+	if err != nil {
+		bc.logger.Errorf("Unable to get sender balance: %s", err)
+		return err
+	}
+
+	toAddr, err := bc.GetBalance(tx.To)
+	if err != nil {
+		bc.logger.Errorf("Unable to get recipient balance: %s", err)
+		return err
+	}
+
+	if tx.Cost() > fromAddr.Balance {
+		return fmt.Errorf("wrong TX. Sender '%s' balance is %d TBB. Tx cost is %d TBB",
+			tx.From.String(), fromAddr.Balance, tx.Cost())
+	}
+
+	fromAddr.Balance -= tx.Cost()
+	toAddr.Balance += tx.Value
+
+	fromAddr.Nonce = tx.Nonce
+
+	from, err := fromAddr.Serialize()
+	if err != nil {
+		return err
+	}
+
+	to, err := toAddr.Serialize()
+	if err != nil {
+		return err
+	}
+
+	return bc.db.Update(func(txn *badger.Txn) error {
+		senderKey := append(balancesPrefix, fromAddr.Address.Bytes()...)
+		if err := txn.Set(senderKey, from); err != nil {
+			return err
+		}
+
+		recipientKey := append(balancesPrefix, toAddr.Address.Bytes()...)
+		return txn.Set(recipientKey, to)
+	})
 }
