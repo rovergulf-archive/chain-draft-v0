@@ -8,9 +8,11 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/opentracing/opentracing-go"
 	"github.com/rovergulf/rbn/core"
+	"github.com/rovergulf/rbn/core/types"
 	"github.com/rovergulf/rbn/database/badgerdb"
 	"github.com/rovergulf/rbn/params"
-	"github.com/rovergulf/rbn/pkg/exit"
+	"github.com/rovergulf/rbn/pkg/sigutil"
+	"github.com/rovergulf/rbn/pkg/traceutil"
 	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/viper"
 	"github.com/uber/jaeger-client-go"
@@ -29,17 +31,13 @@ import (
 const (
 	DbFileName = "node.db"
 
-	DefaultNodeIP      = "127.0.0.1"
-	DefaultNodePort    = 9420
-	HttpSSLPort        = 443
-	DefaultNetworkAddr = "127.0.0.1:9420"
-	rpcNetProtocol     = "tcp"
+	DefaultNodeIP   = "127.0.0.1"
+	DefaultNodePort = 9420
+	HttpSSLPort     = 443
 
 	endpointStatus  = "/node/status"
 	endpointSync    = "/node/sync"
 	endpointAddPeer = "/node/peer"
-
-	CoinbaseAccount = "0xf276db9ddd4b7bE9aDA96D0489bA5d6106c7eFad"
 )
 
 // Node represents blockchain network peer node
@@ -69,8 +67,7 @@ type Node struct {
 	//Lock *sync.RWMutex
 
 	logger *zap.SugaredLogger
-	tracer opentracing.Tracer
-	closer io.Closer
+	tracer traceutil.Tracer
 }
 
 // New creates and returns new node if blockchain available
@@ -83,7 +80,6 @@ func New(opts params.Options) (*Node, error) {
 		syncMode = string(SyncModeDefault)
 	}
 
-	mainNode := NewPeerNode(DefaultNodeIP, DefaultNodePort, common.HexToAddress(CoinbaseAccount), SyncMode(syncMode))
 	pn := NewPeerNode(nodeAddr, nodePort, common.HexToAddress(opts.Address), SyncMode(syncMode))
 
 	n := &Node{
@@ -97,8 +93,7 @@ func New(opts params.Options) (*Node, error) {
 		logger: opts.Logger,
 		knownPeers: knownPeers{
 			peers: map[string]PeerNode{
-				mainNode.TcpAddress(): mainNode,
-				pn.TcpAddress():       pn,
+				pn.TcpAddress(): pn,
 			},
 			lock: new(sync.RWMutex),
 		},
@@ -108,16 +103,13 @@ func New(opts params.Options) (*Node, error) {
 		//Lock:       new(sync.RWMutex),
 	}
 
-	jaegerTraceAddr := viper.GetString("jaeger_trace")
-	if len(jaegerTraceAddr) > 0 {
-		tracer, closer, err := n.initOpentracing(jaegerTraceAddr)
-		if err != nil {
+	tracer, err := traceutil.NewTracerFromViperConfig()
+	if err != nil {
+		if err != traceutil.ErrCollectorUrlNotSpecified {
 			return nil, err
-		} else {
-			n.tracer = tracer
-			n.closer = closer
-			n.httpHandler.tracer = tracer
 		}
+	} else {
+		n.tracer = tracer
 	}
 
 	return n, nil
@@ -125,7 +117,7 @@ func New(opts params.Options) (*Node, error) {
 
 func (n *Node) Init() error {
 
-	exit.ListenExit(func(signal os.Signal) {
+	sigutil.ListenExit(func(signal os.Signal) {
 		n.logger.Warnf("Signal [%s] received. Graceful shutdown", signal)
 		time.AfterFunc(15*time.Second, func() {
 			n.logger.Fatal("Failed to gracefully shutdown after 15 sec. Force exit")
@@ -233,13 +225,11 @@ func (n *Node) Shutdown() {
 		}()
 	}
 
-	if n.closer != nil {
+	if n.tracer != nil {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := n.closer.Close(); err != nil {
-				n.logger.Errorf("Unable to close tracing writer: %s", err)
-			}
+			n.tracer.Close()
 		}()
 	}
 
@@ -369,11 +359,11 @@ func (n *Node) minePendingTXs(ctx context.Context) error {
 		return err
 	}
 
-	header := core.BlockHeader{
+	header := types.BlockHeader{
 		PrevHash:  lb.Hash,
 		Number:    lb.Number + 1,
 		Timestamp: time.Now().Unix(),
-		Validator: n.account.Address(),
+		Coinbase:  n.account.Address(),
 	}
 
 	newBlock := core.NewBlock(header, txs)

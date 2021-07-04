@@ -1,27 +1,21 @@
 package wallets
 
 import (
-	"context"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rovergulf/rbn/database/badgerdb"
 	"github.com/rovergulf/rbn/params"
+	"github.com/rovergulf/rbn/pkg/traceutil"
 	"go.uber.org/zap"
 )
 
 const DbWalletFile = "wallets.db"
 
-type Backend interface {
-	Put(ctx context.Context, key []byte, data []byte)
-	Get(ctx context.Context, key []byte)
-	List(ctx context.Context, prefix []byte)
-	Delete(ctx context.Context, key []byte)
-}
-
 type Manager struct {
 	db     *badger.DB
 	logger *zap.SugaredLogger
+	tracer traceutil.Tracer
 	quit   chan struct{}
 }
 
@@ -45,6 +39,10 @@ func (m *Manager) DbSize() (int64, int64) {
 }
 
 func (m *Manager) Shutdown() {
+	if m.tracer != nil {
+		m.tracer.Close()
+	}
+
 	if m.db != nil {
 		if err := m.db.Close(); err != nil {
 			m.logger.Errorf("Unable to close wallets db: %s", err)

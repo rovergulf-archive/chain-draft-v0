@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
-	"github.com/rovergulf/rbn/rpc"
+	"github.com/rovergulf/rbn/proto"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -58,40 +58,40 @@ func (n *Node) RunGrpcServer(addr string) error {
 		return err
 	}
 
-	rpc.RegisterNodeServiceServer(n.grpcServer, n)
+	proto.RegisterNodeServiceServer(n.grpcServer, n)
 	return n.grpcServer.Serve(l)
 }
 
-func (n *Node) Check(ctx context.Context, req *rpc.HealthCheckRequest) (*rpc.HealthCheckResponse, error) {
+func (n *Node) Check(ctx context.Context, req *proto.HealthCheckRequest) (*proto.HealthCheckResponse, error) {
 	n.logger.Debug("Handle proto.Check request")
-	var status rpc.HealthCheckResponse_ServingStatus
+	var status proto.HealthCheckResponse_ServingStatus
 	if n.grpcServer.GetServiceInfo() != nil {
-		status = rpc.HealthCheckResponse_SERVING
+		status = proto.HealthCheckResponse_SERVING
 	} else {
-		status = rpc.HealthCheckResponse_NOT_SERVING
+		status = proto.HealthCheckResponse_NOT_SERVING
 	}
-	return &rpc.HealthCheckResponse{
+	return &proto.HealthCheckResponse{
 		Status: status,
 	}, nil
 }
 
-func (n *Node) RpcCall(ctx context.Context, req *rpc.CallRequest) (*rpc.CallResponse, error) {
+func (n *Node) RpcCall(ctx context.Context, req *proto.CallRequest) (*proto.CallResponse, error) {
 	n.logger.Debugw("RPC Call", "cmd", req.Cmd)
 
 	switch req.Cmd {
-	case rpc.CallRequest_SYNC_PEERS:
+	case proto.CallRequest_SYNC_PEERS:
 		return n.handleRpcAddPeer(ctx, req.Data)
-	case rpc.CallRequest_SYNC_GEN:
+	case proto.CallRequest_SYNC_GEN:
 		return nil, fmt.Errorf("not implemented")
-	case rpc.CallRequest_SYNC_STATE:
+	case proto.CallRequest_SYNC_STATE:
 		return nil, fmt.Errorf("not implemented")
-	case rpc.CallRequest_SYNC_BLOCKS:
+	case proto.CallRequest_SYNC_BLOCKS:
 		return nil, fmt.Errorf("not implemented")
 	//case rpc.CallRequest_BLOCK_ADD:
 	//	return n.handleRpcAddBlock(ctx, req.Data)
-	case rpc.CallRequest_TX_ADD:
+	case proto.CallRequest_TX_ADD:
 		return n.handleRpcAddTx(ctx, req.Data)
-	case rpc.CallRequest_TX_GET:
+	case proto.CallRequest_TX_GET:
 		return nil, fmt.Errorf("not implemented")
 	default:
 		return nil, fmt.Errorf("invalid command")

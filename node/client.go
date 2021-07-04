@@ -2,7 +2,7 @@ package node
 
 import (
 	"context"
-	"github.com/rovergulf/rbn/rpc"
+	"github.com/rovergulf/rbn/proto"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -11,7 +11,7 @@ import (
 type Client struct {
 	conn *grpc.ClientConn
 	lg   *zap.SugaredLogger
-	rpc.NodeServiceClient
+	proto.NodeServiceClient
 }
 
 func NewClient(ctx context.Context, lg *zap.SugaredLogger, addr string) (*Client, error) {
@@ -21,11 +21,11 @@ func NewClient(ctx context.Context, lg *zap.SugaredLogger, addr string) (*Client
 	}
 	defer conn.Close()
 
-	c := rpc.NewNodeServiceClient(conn)
+	c := proto.NewNodeServiceClient(conn)
 
 	// Contact the server and print out its response.
 
-	healthCheck, err := c.Check(ctx, &rpc.HealthCheckRequest{Service: viper.GetString("app.name")})
+	healthCheck, err := c.Check(ctx, &proto.HealthCheckRequest{Service: viper.GetString("app.name")})
 	if err != nil {
 		return nil, err
 	} else {

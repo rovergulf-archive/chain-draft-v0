@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/opentracing/opentracing-go"
-	"github.com/rovergulf/rbn/rpc"
+	"github.com/rovergulf/rbn/proto"
 )
 
-func (n *Node) handleRpcAddPeer(ctx context.Context, data []byte) (*rpc.CallResponse, error) {
+func (n *Node) handleRpcAddPeer(ctx context.Context, data []byte) (*proto.CallResponse, error) {
 	var pn PeerNode
 
 	if err := pn.Deserialize(data); err != nil {
@@ -34,13 +34,13 @@ func (n *Node) handleRpcAddPeer(ctx context.Context, data []byte) (*rpc.CallResp
 		return nil, err
 	}
 
-	return &rpc.CallResponse{
+	return &proto.CallResponse{
 		Status: 0, // codes.OK
 		Data:   nil,
 	}, nil
 }
 
-func (n *Node) handleRpcGetBlock(ctx context.Context, data []byte) (*rpc.CallResponse, error) {
+func (n *Node) handleRpcGetBlock(ctx context.Context, data []byte) (*proto.CallResponse, error) {
 	if len(data) < 0 {
 		return nil, fmt.Errorf("invalid hash")
 	}
@@ -55,24 +55,24 @@ func (n *Node) handleRpcGetBlock(ctx context.Context, data []byte) (*rpc.CallRes
 		return nil, err
 	}
 
-	return &rpc.CallResponse{
+	return &proto.CallResponse{
 		Status: 0,
 		Data:   result,
 	}, nil
 }
 
-func (n *Node) handleRpcAddBlock(ctx context.Context, data []byte) (*rpc.CallResponse, error) {
+func (n *Node) handleRpcAddBlock(ctx context.Context, data []byte) (*proto.CallResponse, error) {
 	if len(data) < 0 {
 		return nil, fmt.Errorf("empty data")
 	}
 
-	return &rpc.CallResponse{
+	return &proto.CallResponse{
 		Status: 1,
 		Data:   nil,
 	}, fmt.Errorf("not implemented")
 }
 
-func (n *Node) handleRpcAddTx(ctx context.Context, data []byte) (*rpc.CallResponse, error) {
+func (n *Node) handleRpcAddTx(ctx context.Context, data []byte) (*proto.CallResponse, error) {
 	if len(data) < 0 {
 		return nil, fmt.Errorf("empty data")
 	}
@@ -85,7 +85,7 @@ func (n *Node) handleRpcAddTx(ctx context.Context, data []byte) (*rpc.CallRespon
 
 	fmt.Println("got tx", req)
 
-	return &rpc.CallResponse{
+	return &proto.CallResponse{
 		Status: 1,
 		Data:   nil,
 	}, fmt.Errorf("not implemented")

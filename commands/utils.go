@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"fmt"
 	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/node"
 	"github.com/rovergulf/rbn/params"
@@ -13,44 +14,46 @@ import (
 	"path"
 )
 
-func getNodeDataPath() string {
-	return path.Join(viper.GetString("data_dir"), viper.GetString("node_id"))
-}
-
 func getBackupDirPath() string {
-	return path.Join(getNodeDataPath(), viper.GetString("backup_dir"))
+	return path.Join(viper.GetString("data_dir"), viper.GetString("backup_dir"))
 }
 
 func getChainDbFilePath() string {
-	return path.Join(getNodeDataPath(), core.DbFileName)
+	return path.Join(viper.GetString("data_dir"), core.DbFileName)
 }
 
 func getWalletsDbFilePath() string {
-	return path.Join(getNodeDataPath(), wallets.DbWalletFile)
+	return path.Join(viper.GetString("data_dir"), wallets.DbWalletFile)
 }
 
 func getNodeDbFilePath() string {
-	return path.Join(getNodeDataPath(), node.DbFileName)
+	return path.Join(viper.GetString("data_dir"), node.DbFileName)
+}
+
+func prepareBlockchain(cmd *cobra.Command, args []string) error {
+	bc, err := core.NewBlockchain(getBlockchainConfig(cmd))
+	if err != nil {
+		return err
+	} else {
+		blockChain = bc
+	}
+	fmt.Println(blockChain != nil)
+	return nil
+}
+
+func prepareWalletsManager(cmd *cobra.Command, args []string) error {
+	wm, err := wallets.NewManager(getBlockchainConfig(cmd))
+	if err != nil {
+		return err
+	}
+
+	accountManager = wm
+	return nil
 }
 
 func getBlockchainConfig(cmd *cobra.Command) params.Options {
-	address := viper.GetString("address")
-	nodeId := viper.GetString("node_id")
-
-	if len(nodeId) == 0 {
-		nodeId, _ = cmd.Flags().GetString("node-id")
-		viper.Set("node_id", nodeId)
-	}
-
-	if len(address) == 0 {
-		address, _ = cmd.Flags().GetString("address")
-		viper.Set("address", address)
-	}
-
 	opts := params.Options{
-		Address: address,
-		NodeId:  nodeId,
-		Logger:  logger,
+		Logger: logger,
 	}
 
 	opts.DbFilePath = getChainDbFilePath()
@@ -85,14 +88,13 @@ func addOutputFormatFlag(cmd *cobra.Command) {
 	cmd.Flags().StringP("output", "o", "yaml", "specify output format (yaml/json)")
 }
 
-func addAddressFlag(cmd *cobra.Command) {
-	cmd.Flags().StringP("address", "a", "", "Account address")
-	cmd.MarkFlagRequired("address")
-	bindViperFlag(cmd, "address", "address")
+func addNetworkIdFlag(cmd *cobra.Command) {
+	cmd.Flags().String("network-id", params.MainNetworkId, "Chain network id")
+	bindViperFlag(cmd, "network-id", "network-id")
 }
 
-func addNodeIdFlag(cmd *cobra.Command) {
-	cmd.Flags().String("node-id", os.Getenv("NODE_ID"), "Blockchain node id")
-	cmd.MarkFlagRequired("node-id")
-	bindViperFlag(cmd, "node_id", "node-id")
+func addAddressFlag(cmd *cobra.Command) {
+	cmd.Flags().StringP("address", "a", "", "Specify wallet address")
+	cmd.MarkFlagRequired("address")
+	bindViperFlag(cmd, "address", "address")
 }

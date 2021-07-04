@@ -35,7 +35,6 @@ func WriteYAML(w io.Writer, lg *zap.SugaredLogger, v interface{}) error {
 }
 
 func write(w io.Writer, data []byte) error {
-	data = append(data, '\n')
 	if _, err := w.Write(data); err != nil {
 		return err
 	}

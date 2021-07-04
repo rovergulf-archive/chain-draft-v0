@@ -24,10 +24,79 @@ func walletsCmd() *cobra.Command {
 	}
 
 	walletsCmd.AddCommand(walletsNewCmd())
+	walletsCmd.AddCommand(walletsUpdateAuthCmd())
 	walletsCmd.AddCommand(walletsListCmd())
 	walletsCmd.AddCommand(walletsPrintPrivKeyCmd())
 
 	return walletsCmd
+}
+
+func walletsListCmd() *cobra.Command {
+	var walletsListCmd = &cobra.Command{
+		Use:   "list",
+		Short: "Lists available wallet addresses.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			opts := getBlockchainConfig(cmd)
+			wm, err := wallets.NewManager(opts)
+			if err != nil {
+				return err
+			}
+			defer wm.Shutdown()
+
+			addresses, err := wm.GetAllAddresses()
+			if err != nil {
+				return err
+			}
+
+			return writeOutput(cmd, map[string]interface{}{
+				"_node_id":  opts.NodeId,
+				"addresses": addresses,
+			})
+		},
+		TraverseChildren: true,
+	}
+
+	addOutputFormatFlag(walletsListCmd)
+
+	return walletsListCmd
+}
+
+func walletsPrintPrivKeyCmd() *cobra.Command {
+	var walletsPrintPrivKeyCmd = &cobra.Command{
+		Use:   "print-pk",
+		Short: "Unlocks keystore file and prints the Private + Public keys.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			address, _ := cmd.Flags().GetString("address")
+			if !common.IsHexAddress(address) {
+				return fmt.Errorf("bad address format")
+			}
+
+			auth, err := getPassPhrase("Enter passphrase do decrypt wallet:", true)
+			if err != nil {
+				return err
+			}
+
+			wm, err := wallets.NewManager(getBlockchainConfig(cmd))
+			if err != nil {
+				return err
+			}
+			defer wm.Shutdown()
+
+			wallet, err := wm.GetWallet(common.HexToAddress(address), auth)
+			if err != nil {
+				logger.Errorf("Unable to get wallet: %s", err)
+				return err
+			}
+
+			return writeOutput(cmd, wallet.GetKey())
+		},
+		TraverseChildren: true,
+	}
+
+	addOutputFormatFlag(walletsPrintPrivKeyCmd)
+	addAddressFlag(walletsPrintPrivKeyCmd)
+
+	return walletsPrintPrivKeyCmd
 }
 
 func walletsNewCmd() *cobra.Command {
@@ -81,10 +150,6 @@ func walletsNewCmd() *cobra.Command {
 		},
 		TraverseChildren: true,
 	}
-
-	addNodeIdFlag(walletsNewCmd)
-	bindViperFlag(walletsNewCmd, "node_id", "node-id")
-	walletsNewCmd.MarkFlagRequired("node-id")
 
 	walletsNewCmd.Flags().Bool("mnemonic", true, "Use mnemonic passphrase for wallet encrypting")
 
@@ -156,84 +221,25 @@ func walletsUpdateAuthCmd() *cobra.Command {
 		TraverseChildren: true,
 	}
 
-	addNodeIdFlag(walletsNewCmd)
 	addAddressFlag(walletsNewCmd)
-	bindViperFlag(walletsNewCmd, "node_id", "node-id")
-	walletsNewCmd.MarkFlagRequired("node-id")
 
 	walletsNewCmd.Flags().Bool("mnemonic", true, "Use mnemonic passphrase for wallet encrypting")
 
 	return walletsNewCmd
 }
 
-func walletsPrintPrivKeyCmd() *cobra.Command {
-	var walletsPrintPrivKeyCmd = &cobra.Command{
-		Use:   "print-pk",
-		Short: "Unlocks keystore file and prints the Private + Public keys.",
+func walletsImportCmd() *cobra.Command {
+	var walletsImportCmd = &cobra.Command{
+		Use:   "import",
+		Short: "Import account key to keystore",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			address, _ := cmd.Flags().GetString("address")
-			if !common.IsHexAddress(address) {
-				return fmt.Errorf("bad address format")
-			}
-
-			auth, err := getPassPhrase("Enter passphrase do decrypt wallet:", true)
-			if err != nil {
-				return err
-			}
-
-			wm, err := wallets.NewManager(getBlockchainConfig(cmd))
-			if err != nil {
-				return err
-			}
-			defer wm.Shutdown()
-
-			wallet, err := wm.GetWallet(common.HexToAddress(address), auth)
-			if err != nil {
-				logger.Errorf("Unable to get wallet: %s", err)
-				return err
-			}
-
-			return writeOutput(cmd, wallet.GetKey())
+			// TBD
+			return nil
 		},
 		TraverseChildren: true,
 	}
 
-	addOutputFormatFlag(walletsPrintPrivKeyCmd)
-	addAddressFlag(walletsPrintPrivKeyCmd)
-	addNodeIdFlag(walletsPrintPrivKeyCmd)
-
-	return walletsPrintPrivKeyCmd
-}
-
-func walletsListCmd() *cobra.Command {
-	var walletsListCmd = &cobra.Command{
-		Use:   "list",
-		Short: "Lists available wallet addresses.",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			opts := getBlockchainConfig(cmd)
-			wm, err := wallets.NewManager(opts)
-			if err != nil {
-				return err
-			}
-			defer wm.Shutdown()
-
-			addresses, err := wm.GetAllAddresses()
-			if err != nil {
-				return err
-			}
-
-			return writeOutput(cmd, map[string]interface{}{
-				"_node_id":  opts.NodeId,
-				"addresses": addresses,
-			})
-		},
-		TraverseChildren: true,
-	}
-
-	addOutputFormatFlag(walletsListCmd)
-	addNodeIdFlag(walletsListCmd)
-
-	return walletsListCmd
+	return walletsImportCmd
 }
 
 func getPassPhrase(message string, confirmation bool) (string, error) {

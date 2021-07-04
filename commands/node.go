@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/ethereum/go-ethereum/console/prompt"
 	"github.com/rovergulf/rbn/node"
@@ -68,8 +69,6 @@ func nodeRunCmd() *cobra.Command {
 		TraverseChildren: true,
 	}
 
-	addNodeIdFlag(nodeRunCmd)
-
 	nodeRunCmd.Flags().StringP("address", "a", "", "Node account address")
 
 	// node
@@ -126,15 +125,61 @@ func nodeStopCmd() *cobra.Command {
 		TraverseChildren: true,
 	}
 
-	addNodeIdFlag(nodeStopCmd)
-
 	return nodeStopCmd
 }
 
 func nodeAccountDumpCmd() *cobra.Command {
 	nodeAccountDumpCmd := &cobra.Command{
 		Use:   "account-dump",
-		Short: "Export account key",
+		Short: "Export node account key",
+		Long:  ``,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			n, err := node.New(getBlockchainConfig(cmd))
+			if err != nil {
+				return err
+			}
+
+			if err := n.Init(); err != nil {
+				return err
+			}
+
+			w, err := n.GetNodeAccount()
+			if err != nil {
+				return err
+			}
+
+			filePath, _ := cmd.Flags().GetString("file")
+			if path.Ext(filePath) != ".json" {
+				return fmt.Errorf("file extension must be json")
+			}
+
+			if err := ioutil.WriteFile(filePath, w.KeyData, 0755); err != nil {
+				return err
+			}
+
+			fmt.Println(len(w.KeyData))
+			if err := json.Unmarshal(w.KeyData, &w.Crypto); err != nil {
+				return err
+			}
+
+			return writeOutput(cmd, map[string]interface{}{
+				"address": w.Address(),
+				"auth":    w.Auth,
+			})
+		},
+		TraverseChildren: true,
+	}
+
+	nodeAccountDumpCmd.Flags().StringP("file", "f", "", "Specify key file path to write")
+	nodeAccountDumpCmd.MarkFlagRequired("file")
+
+	return nodeAccountDumpCmd
+}
+
+func nodeAccountRecoverCmd() *cobra.Command {
+	nodeAccountDumpCmd := &cobra.Command{
+		Use:   "account-recover",
+		Short: "Import node account key",
 		Long:  ``,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			n, err := node.New(getBlockchainConfig(cmd))
@@ -161,14 +206,13 @@ func nodeAccountDumpCmd() *cobra.Command {
 			}
 
 			return writeOutput(cmd, map[string]interface{}{
-				"address": w.Address(),
-				"auth":    w.Auth,
+				"address":    w.Address(),
+				"auth":       w.Auth,
+				"cryptoJson": filePath,
 			})
 		},
 		TraverseChildren: true,
 	}
-
-	addNodeIdFlag(nodeAccountDumpCmd)
 
 	nodeAccountDumpCmd.Flags().StringP("file", "f", "", "Specify key file path to write")
 	nodeAccountDumpCmd.MarkFlagRequired("file")

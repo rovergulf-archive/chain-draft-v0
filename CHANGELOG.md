@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
+
+## 3 Jul 2021
+
+### Added
+- more `params` package constants, to be used in network consensus verification
+
+### Changed
+- Chain genesis initialization now have hardcoded default values 
+
+### Fixed
+
+### Removed
+
+
 ## 3 Jul 2021
 
 ### Added
@@ -11,8 +25,7 @@ All notable changes to this project will be documented in this file.
 - transaction signer verification
 
 ### Changed
-
-### Fixed
+- Genesis initialization
 
 ### Removed
 - legacy sync methods

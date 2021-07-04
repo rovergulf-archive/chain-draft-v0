@@ -17,8 +17,8 @@ type Config struct {
 	Addr string `json:"addr" yaml:"addr"`
 }
 
-// Backend represents multiple drivers storage interface
-type Backend interface {
+// ChainBackend represents multiple drivers storage interface for core.Blockchain
+type ChainBackend interface {
 	GetGenesis() (*core.Genesis, error)
 	LatestBlock() (*core.Block, error)
 	AddBlock(key string, block core.Block) error
@@ -28,5 +28,10 @@ type Backend interface {
 	FindTransaction(txHash []byte) (*core.SignedTx, error)
 	ListTransactions() ([]*core.SignedTx, error)
 
+	Shutdown()
+}
+
+// NodeBackend represents RBN node.Node backend
+type NodeBackend interface {
 	Shutdown()
 }

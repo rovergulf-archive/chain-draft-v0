@@ -3,7 +3,7 @@
 
 ## Rovergulf Blockchain Network
 
-[RBN](https://chain.rovergulf.net) - Blockchain algorithm implemented by Rovergulf Engineers team
+[RBN](https://chain.rovergulf.net) - Blockchain algorithm implemented by Rovergulf Engineers team based on [Etherium SDK](https://github.com/ethereum/go-ethereum)
 
 ### Information
 - Documentation: [RBN Docs](https://chain.rovergulf.net/docs)
@@ -14,8 +14,6 @@
 
 ### Simple source build
 ```shell
-go build -o rbn ./cmd/cli/main.go
-
 ./rbn help
 
 # or just
@@ -28,12 +26,9 @@ go run cmd/cli/main.go help
 
 ### From source
 ```shell
-
-```
-
-### GOPATH
-```shell
-
+git clone github.com/rovergulf/rbn
+cd rbn
+go build
 ```
 
 ### Containers
@@ -54,9 +49,15 @@ rbn --version
 
 ### Rovergulf Native Token
 
-An extra reward for platform achievements and/or trading
+An extra reward for platform achievements (for a [swap](https://swap.rovergulf.net) platform) and new block validations
 
 ---
+
+## Contributing
+
+Read [Contributing guide](CONTRIBUTING.md)
+
+
 ## Maintainers
 
 **Rovergulf Engineering Team** <team@rovergulf.net>  

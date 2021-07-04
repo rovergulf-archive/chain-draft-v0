@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"github.com/rovergulf/rbn/core"
+	"context"
 	"github.com/spf13/cobra"
 )
 
@@ -29,25 +29,26 @@ func blockchainCmd() *cobra.Command {
 // initBlockchainCmd represents the run command
 func initBlockchainCmd() *cobra.Command {
 	var initBlockchainCmd = &cobra.Command{
-		Use:   "init",
-		Short: "Init blockchain",
-		Long:  ``,
+		Use:     "init",
+		Short:   "Start chain genesis block",
+		Long:    ``,
+		PreRunE: prepareBlockchain,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			bc, err := core.InitBlockchain(getBlockchainConfig(cmd))
-			if err != nil {
-				logger.Errorf("Unable to start blockchain: %s", err)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			defer blockChain.Shutdown()
+
+			if err := blockChain.NewGenesisBlockWithRewrite(ctx); err != nil {
 				return err
 			}
-			defer bc.Shutdown()
 
-			logger.Infow("Blockchain initialized.", "tip", bc.LastHash)
+			logger.Infow("Blockchain initialized.", "tip", blockChain.LastHash)
 
 			return nil
 		},
 		TraverseChildren: true,
 	}
 
-	addNodeIdFlag(initBlockchainCmd)
 	initBlockchainCmd.Flags().StringP("genesis", "g", "", "Genesis file path")
 	initBlockchainCmd.MarkFlagRequired("genesis")
 	bindViperFlag(initBlockchainCmd, "genesis", "genesis")
@@ -58,18 +59,14 @@ func initBlockchainCmd() *cobra.Command {
 // blockchainListCmd represents the blocks list command
 func blockchainListCmd() *cobra.Command {
 	var blockchainListCmd = &cobra.Command{
-		Use:   "list",
-		Short: "Lists all blocks.",
+		Use:     "list",
+		Short:   "Lists all blocks.",
+		PreRunE: prepareBlockchain,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			maxLimit, _ := cmd.Flags().GetInt("limit")
 
-			bc, err := core.ContinueBlockchain(getBlockchainConfig(cmd))
-			if err != nil {
-				logger.Error("Unable to start blockchain: %s", err)
-				return err
-			}
-			defer bc.Shutdown()
-			bci := bc.Iterator()
+			defer blockChain.Shutdown()
+			bci := blockChain.Iterator()
 
 			var limit int
 			for {
@@ -102,7 +99,6 @@ func blockchainListCmd() *cobra.Command {
 	}
 
 	blockchainListCmd.Flags().Int("limit", 10, "Limit to show")
-	addNodeIdFlag(blockchainListCmd)
 	addOutputFormatFlag(blockchainListCmd)
 
 	return blockchainListCmd
@@ -111,17 +107,13 @@ func blockchainListCmd() *cobra.Command {
 // blockchainLastBlockCmd represents the blockchain last-block command
 func blockchainLastBlockCmd() *cobra.Command {
 	var blockchainLastBlockCmd = &cobra.Command{
-		Use:   "last-block",
-		Short: "Show last block in the chain",
+		Use:     "last-block",
+		Short:   "Show last block in the chain",
+		PreRunE: prepareBlockchain,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			bc, err := core.ContinueBlockchain(getBlockchainConfig(cmd))
-			if err != nil {
-				logger.Error("Unable to start blockchain: %s", err)
-				return err
-			}
-			defer bc.Shutdown()
+			defer blockChain.Shutdown()
 
-			block, err := bc.GetBlock(bc.LastHash)
+			block, err := blockChain.GetBlock(blockChain.LastHash)
 			if err != nil {
 				return err
 			}
@@ -131,7 +123,6 @@ func blockchainLastBlockCmd() *cobra.Command {
 		TraverseChildren: true,
 	}
 
-	addNodeIdFlag(blockchainLastBlockCmd)
 	addOutputFormatFlag(blockchainLastBlockCmd)
 
 	return blockchainLastBlockCmd
@@ -139,17 +130,14 @@ func blockchainLastBlockCmd() *cobra.Command {
 
 func blockchainGenesisCmd() *cobra.Command {
 	var blockchainGenesisCmd = &cobra.Command{
-		Use:   "genesis",
-		Short: "Show chain genesis",
+		Use:     "show-genesis",
+		Aliases: []string{"get-gen", "genesis"},
+		Short:   "Show chain genesis",
+		PreRunE: prepareBlockchain,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			bc, err := core.ContinueBlockchain(getBlockchainConfig(cmd))
-			if err != nil {
-				logger.Error("Unable to start blockchain: %s", err)
-				return err
-			}
-			defer bc.Shutdown()
+			defer blockChain.Shutdown()
 
-			gen, err := bc.GetGenesis()
+			gen, err := blockChain.GetGenesis()
 			if err != nil {
 				return err
 			}

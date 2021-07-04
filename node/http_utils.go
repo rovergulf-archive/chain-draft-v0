@@ -7,8 +7,8 @@ import (
 	"github.com/opentracing/opentracing-go"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prom2json"
+	"github.com/rovergulf/rbn/params"
 	"github.com/rovergulf/rbn/pkg/resutil"
-	"github.com/rovergulf/rbn/pkg/version"
 	"go.uber.org/zap"
 	"net/http"
 	"strings"
@@ -45,9 +45,10 @@ var allowedMethods = []string{
 
 // httpServer represents mux.Router interceptor, to handle CORS requests
 type httpServer struct {
-	router *mux.Router
-	tracer opentracing.Tracer
-	logger *zap.SugaredLogger
+	router     *mux.Router
+	tracer     opentracing.Tracer
+	logger     *zap.SugaredLogger
+	httpServer http.Server
 }
 
 // ServeHTTP wraps http.Server ServeHTTP method to handle preflight requests
@@ -144,7 +145,7 @@ func (n *Node) healthCheck(w http.ResponseWriter, r *http.Request) {
 	n.httpResponse(w, map[string]interface{}{
 		"http_status": http.StatusOK,
 		"timestamp":   time.Now().Unix(),
-		"run_date":    version.RunDate.Format(time.RFC1123),
+		"run_date":    params.RunDate.Format(time.RFC1123),
 		"node_status": "healthy",
 		"is_mining":   n.isMining,
 	})

@@ -23,6 +23,7 @@ func init() {
 type Wallet struct {
 	Auth    string `json:"auth" yaml:"auth"`
 	KeyData []byte `json:"-" yaml:"-"` // stores encrypted key
+	Crypto  keystore.CryptoJSON
 	key     *keystore.Key
 }
 

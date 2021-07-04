@@ -8,7 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/console/prompt"
 	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/node"
-	"github.com/rovergulf/rbn/rpc"
+	"github.com/rovergulf/rbn/proto"
 	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -56,8 +56,6 @@ func txReindexTxCmd() *cobra.Command {
 		TraverseChildren: true,
 	}
 
-	addNodeIdFlag(txReindexTxCmd)
-
 	return txReindexTxCmd
 }
 
@@ -91,7 +89,6 @@ func txGetCmd() *cobra.Command {
 	}
 
 	addOutputFormatFlag(txGetCmd)
-	addNodeIdFlag(txGetCmd)
 	txGetCmd.Flags().String("id", "", "Transaction id")
 	txGetCmd.MarkFlagRequired("id")
 
@@ -171,8 +168,8 @@ func txSendCmd() *cobra.Command {
 				return err
 			}
 
-			res, err := client.RpcCall(ctx, &rpc.CallRequest{
-				Cmd:  rpc.CallRequest_TX_ADD,
+			res, err := client.RpcCall(ctx, &proto.CallRequest{
+				Cmd:  proto.CallRequest_TX_ADD,
 				Data: callData,
 			})
 			if err != nil {
@@ -180,7 +177,6 @@ func txSendCmd() *cobra.Command {
 			}
 
 			return writeOutput(cmd, res)
-			//return node.SendTx(viper.GetString("node_id"), tx)
 		},
 		TraverseChildren: true,
 	}
@@ -191,7 +187,6 @@ func txSendCmd() *cobra.Command {
 	txSendCmd.MarkFlagRequired("amount")
 
 	addAddressFlag(txSendCmd)
-	addNodeIdFlag(txSendCmd)
 
 	return txSendCmd
 }

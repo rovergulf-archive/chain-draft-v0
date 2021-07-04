@@ -4,7 +4,10 @@ import (
 	"crypto/tls"
 	"fmt"
 	homedir "github.com/mitchellh/go-homedir"
+	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/node"
+	"github.com/rovergulf/rbn/params"
+	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -16,7 +19,8 @@ import (
 var (
 	cfgFile, dataDir string
 	logger           *zap.SugaredLogger
-	//bc *core.Blockchain
+	blockChain       *core.Blockchain
+	accountManager   *wallets.Manager
 	//node *node.Node
 )
 
@@ -40,7 +44,7 @@ var rootCmd = &cobra.Command{
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		logger.Error(err)
 		os.Exit(1)
 	}
 }
@@ -59,8 +63,10 @@ func init() {
 
 	// main flags
 	rootCmd.PersistentFlags().StringVar(&dataDir, "data_dir", os.Getenv("DATA_DIR"), "Blockchain data directory")
+	rootCmd.PersistentFlags().StringVar(&dataDir, "network.id", params.MainNetworkId, "Chain network id")
 
 	// bind viper values
+	bindViperPersistentFlag(rootCmd, "network.id", "network-id")
 	bindViperPersistentFlag(rootCmd, "app.dev", "dev")
 	bindViperPersistentFlag(rootCmd, "log_json", "log_json")
 	bindViperPersistentFlag(rootCmd, "log_level", "log_level")
@@ -112,9 +118,10 @@ func setConfigDefaults() {
 	// storage
 	viper.SetDefault("db", "")
 	viper.SetDefault("data_dir", "tmp")
+	viper.SetDefault("keystore", "")
 	viper.SetDefault("pid_file", "/var/run/rbn/pidfile")
-	viper.SetDefault("backup_dir", backupsDir)
 
+	// TBD dgraph connection settings -
 	viper.SetDefault("dgraph.enabled", false)
 	viper.SetDefault("dgraph.host", "127.0.0.1")
 	viper.SetDefault("dgraph.port", "9080")
@@ -131,7 +138,7 @@ func setConfigDefaults() {
 	viper.SetDefault("ssl.mode", tls.NoClientCert)
 
 	// chain network setup
-	viper.SetDefault("network.id", "9420")
+	viper.SetDefault("network.id", params.MainNetworkId)
 	viper.SetDefault("network.addr", "127.0.0.1:9420")
 	viper.SetDefault("network.discovery", "swarm.rovergulf.net:443")
 
@@ -149,7 +156,7 @@ func setConfigDefaults() {
 	// TBD
 	// Cache
 	//viper.SetDefault("cache.enabled", false)
-	//viper.SetDefault("cache.size", 256 << 20) // 256mb
+	viper.SetDefault("cache.size", 256<<20) // 256mb
 
 	// Runtime configuration
 	//viper.SetDefault("runtime.max_cpu", runtime.NumCPU())

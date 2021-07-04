@@ -4,8 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
-	"fmt"
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/rovergulf/rbn/core/types"
 )
 
 var (
@@ -13,39 +12,18 @@ var (
 	blocksPrefixLength = len(blocksPrefix)
 )
 
-type BlockHeader struct {
-	PrevHash  common.Hash    `json:"prev_hash" yaml:"prev_hash"`
-	Hash      common.Hash    `json:"hash" yaml:"hash"`
-	Root      common.Hash    `json:"root" yaml:"root"`
-	Number    uint64         `json:"number" yaml:"number"`
-	Timestamp int64          `json:"timestamp" yaml:"timestamp"`
-	Validator common.Address `json:"validator" yaml:"validator"`
-}
-
-func (bh *BlockHeader) Validate() error {
-	if bytes.Compare(bh.Hash.Bytes(), common.HexToHash("").Bytes()) == 0 {
-		return fmt.Errorf("invalid block hash")
-	}
-
-	if bytes.Compare(bh.Validator.Bytes(), common.Address{}.Bytes()) == 0 {
-		return fmt.Errorf("invalid validator address")
-	}
-
-	if bh.Timestamp == 0 {
-		return fmt.Errorf("invalid timestamp")
-	}
-
-	return nil
-}
-
 // Block represents
 type Block struct {
-	BlockHeader
+	types.BlockHeader
 	Transactions []SignedTx `json:"transactions" yaml:"transactions"`
+
+	size int64
+
+	ReceivedAt int64 `json:"received_at" yaml:"received_at"`
 }
 
 // NewBlock creates and returns Block
-func NewBlock(header BlockHeader, txs []SignedTx) *Block {
+func NewBlock(header types.BlockHeader, txs []SignedTx) *Block {
 	return &Block{
 		BlockHeader:  header,
 		Transactions: txs,
@@ -54,6 +32,18 @@ func NewBlock(header BlockHeader, txs []SignedTx) *Block {
 
 // SetHash sets a hash of the block
 func (b *Block) SetHash() error {
+	enc, err := b.Serialize()
+	if err != nil {
+		return err
+	}
+
+	hash := sha256.Sum256(enc)
+	b.Hash = hash
+	return nil
+}
+
+// Size returns encoded block value byte length
+func (b *Block) Size() error {
 	enc, err := b.Serialize()
 	if err != nil {
 		return err

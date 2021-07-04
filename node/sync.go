@@ -57,7 +57,7 @@ func (n *Node) doSync(ctx context.Context) {
 	}
 }
 
-func (n *Node) syncBlocks() error {
+func (n *Node) joinKnownPeer(peer PeerNode) error {
 	return fmt.Errorf("not implemented")
 }
 
@@ -75,11 +75,14 @@ func (n *Node) syncKnownPeers() error {
 	return nil
 }
 
+func (n *Node) syncBlocks() error {
+	return fmt.Errorf("not implemented")
+}
+
 func (n *Node) syncPendingTXs() error {
 	return fmt.Errorf("not implemented")
 }
 
-func (n *Node) joinKnownPeer(peer PeerNode) error {
-
+func (n *Node) syncAccounts(peer PeerNode) error {
 	return fmt.Errorf("not implemented")
 }
