@@ -48,7 +48,7 @@ func (bc *Blockchain) NewGenesisBlockWithRewrite(ctx context.Context) error {
 			tx := genesisBlock.Transactions[i]
 
 			bal := types.Balance{
-				Account: tx.To,
+				Address: tx.To,
 				Balance: tx.Value,
 				Nonce:   0,
 			}

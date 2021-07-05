@@ -112,12 +112,12 @@ func (bc *Blockchain) ApplyTx(tx types.SignedTx) error {
 	}
 
 	return bc.db.Update(func(txn *badger.Txn) error {
-		senderKey := append(balancesPrefix, fromAddr.Account.Bytes()...)
+		senderKey := append(balancesPrefix, fromAddr.Address.Bytes()...)
 		if err := txn.Set(senderKey, from); err != nil {
 			return err
 		}
 
-		recipientKey := append(balancesPrefix, toAddr.Account.Bytes()...)
+		recipientKey := append(balancesPrefix, toAddr.Address.Bytes()...)
 		return txn.Set(recipientKey, to)
 	})
 }
