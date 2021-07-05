@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/rovergulf/rbn/params"
+	"time"
 )
 
 var (
@@ -12,6 +15,30 @@ var (
 )
 
 type Transactions []Transaction
+
+// NewTransaction creates a new transaction
+func NewTransaction(from, to common.Address, amount uint64, nonce uint64, data []byte) (Transaction, error) {
+	if from == to {
+		return Transaction{}, fmt.Errorf("transaction cannot be sent to yourself")
+	}
+
+	percentile := params.RNT / (params.TxPrice * params.NetherPrice)
+	nether := amount / percentile
+	if nether < params.NetherLimit {
+		nether = params.NetherLimit
+	}
+
+	return Transaction{
+		From:        from,
+		To:          to,
+		Value:       amount,
+		Nonce:       nonce,
+		Nether:      nether,
+		NetherPrice: params.NetherPrice,
+		Data:        data,
+		Time:        time.Now().Unix(),
+	}, nil
+}
 
 // Transaction represents a Bitcoin transaction
 type Transaction struct {
@@ -38,7 +65,7 @@ func (tx *Transaction) Hash() ([]byte, error) {
 	return hash[:], nil
 }
 
-// Serialize encodes Transaction with gob encoder
+// Serialize encodes Transaction to binary data
 func (tx Transaction) Serialize() ([]byte, error) {
 	var encoded bytes.Buffer
 
@@ -50,7 +77,7 @@ func (tx Transaction) Serialize() ([]byte, error) {
 	return encoded.Bytes(), nil
 }
 
-// Deserialize decodes and returns valid Transaction
+// Deserialize decodes binary data and returns valid Transaction
 func (tx *Transaction) Deserialize(data []byte) error {
 	decoder := gob.NewDecoder(bytes.NewReader(data))
 	return decoder.Decode(tx)
@@ -61,6 +88,5 @@ func (tx *Transaction) IsReward() bool {
 }
 
 func (tx *Transaction) Cost() uint64 {
-	netherFee := tx.Nether * tx.NetherPrice
-	return tx.Value + netherFee
+	return tx.Value + tx.Nether
 }

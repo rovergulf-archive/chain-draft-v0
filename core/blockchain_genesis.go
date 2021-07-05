@@ -3,21 +3,22 @@ package core
 import (
 	"context"
 	"github.com/dgraph-io/badger/v3"
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/rovergulf/rbn/core/types"
 	"github.com/spf13/viper"
 )
 
 func (bc *Blockchain) NewGenesisBlockWithRewrite(ctx context.Context) error {
 	gen := genesisByNetworkId(viper.GetString("network.id"))
 
-	genSerialized, err := gen.Serialize()
+	genesisBlock, err := gen.ToBlock()
 	if err != nil {
-		bc.logger.Errorf("Unable to marshal genesis: %s", err)
+		bc.logger.Errorf("Unable to prepare genesis block")
 		return err
 	}
 
-	genesisBlock, err := gen.ToBlock()
+	genSerialized, err := gen.Serialize()
 	if err != nil {
+		bc.logger.Errorf("Unable to marshal genesis: %s", err)
 		return err
 	}
 
@@ -43,12 +44,12 @@ func (bc *Blockchain) NewGenesisBlockWithRewrite(ctx context.Context) error {
 			return err
 		}
 
-		for addr := range gen.Alloc {
-			genAcc := gen.Alloc[addr]
+		for i := range genesisBlock.Transactions {
+			tx := genesisBlock.Transactions[i]
 
-			bal := Balance{
-				Address: common.Address{},
-				Balance: genAcc.Balance,
+			bal := types.Balance{
+				Account: tx.To,
+				Balance: tx.Value,
 				Nonce:   0,
 			}
 
@@ -57,7 +58,7 @@ func (bc *Blockchain) NewGenesisBlockWithRewrite(ctx context.Context) error {
 				return err
 			}
 
-			balanceKey := append(balancesPrefix, addr.Bytes()...)
+			balanceKey := append(balancesPrefix, tx.To.Bytes()...)
 			if err := txn.Set(balanceKey, balanceEncoded); err != nil {
 				bc.logger.Errorf("Unable to save balance: %s", err)
 				return err

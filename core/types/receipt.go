@@ -32,7 +32,7 @@ func (r Receipt) Serialize() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// Deserialize deserializes a receipt from gob encoding
+// Deserialize deserializes binary data to receipt
 func (r *Receipt) Deserialize(d []byte) error {
 	decoder := gob.NewDecoder(bytes.NewReader(d))
 	return decoder.Decode(r)

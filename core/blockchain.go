@@ -7,6 +7,7 @@ import (
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/opentracing/opentracing-go"
+	"github.com/rovergulf/rbn/core/types"
 	"github.com/rovergulf/rbn/database/badgerdb"
 	"github.com/rovergulf/rbn/params"
 	"go.uber.org/zap"
@@ -25,8 +26,8 @@ type Blockchain struct {
 	LastHash    common.Hash `json:"last_hash" yaml:"last_hash"`
 	ChainLength uint64      `json:"chain_length" yaml:"chain_length"`
 
-	genesis      *Genesis
-	currentBlock *Block
+	genesis *Genesis
+	//currentBlock *types.Block
 
 	//mu *sync.RWMutex
 
@@ -93,7 +94,7 @@ func (bc *Blockchain) loadChainState() error {
 			}
 
 			return lastBlockValue.Value(func(val []byte) error {
-				var b Block
+				var b types.Block
 
 				if err := b.Deserialize(val); err != nil {
 					bc.logger.Errorf("Unable to decode last block value: %s", err)
@@ -113,7 +114,7 @@ func (bc *Blockchain) DbSize() (int64, int64) {
 }
 
 // ValidateNextBlock simply validates base block values // TBD made more efficient validation method
-func (bc *Blockchain) ValidateNextBlock(next *Block) error {
+func (bc *Blockchain) ValidateNextBlock(next *types.Block) error {
 	if bytes.Compare(next.PrevHash.Bytes(), bc.LastHash.Bytes()) != 0 {
 		return fmt.Errorf("invalid previous hash: %s", next.PrevHash)
 	}
@@ -127,7 +128,7 @@ func (bc *Blockchain) ValidateNextBlock(next *Block) error {
 }
 
 // AddBlock adds a block with the provided transactions
-func (bc *Blockchain) AddBlock(block *Block) error {
+func (bc *Blockchain) AddBlock(block *types.Block) error {
 	if err := bc.ValidateNextBlock(block); err != nil {
 		return err
 	}
@@ -138,51 +139,27 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 	}
 
 	return bc.db.Update(func(txn *badger.Txn) error {
-		if _, err := txn.Get(block.Hash.Bytes()); err == nil {
-			return nil
-		}
-
-		lastHash, err := txn.Get([]byte("lh"))
-		if err != nil {
+		if err := txn.Set(block.Hash.Bytes(), blockData); err != nil {
 			return err
 		}
 
-		return lastHash.Value(func(val []byte) error {
-			lb, err := txn.Get(val)
-			if err != nil {
-				return err
-			}
+		if err := txn.Set([]byte("lh"), block.Hash.Bytes()); err != nil {
+			bc.logger.Errorf("Unable to set last hash value: %s", err)
+			return err
+		}
 
-			return lb.Value(func(val []byte) error {
-				lastBlock, err := DeserializeBlock(val)
-				if err != nil {
-					bc.logger.Errorf("Unable to deserialize block: %s", err)
-					return err
-				}
+		bc.LastHash = block.Hash
+		bc.ChainLength = block.Number + 1
 
-				if err := txn.Set(block.Hash.Bytes(), blockData); err != nil {
-					return err
-				}
+		bc.logger.Infow("Saved block", "prev", block.PrevHash,
+			"hash", block.Hash, "number", block.Number, "txs", len(block.Transactions))
 
-				if err := txn.Set([]byte("lh"), block.Hash.Bytes()); err != nil {
-					bc.logger.Errorf("Unable to set last hash value: %s", err)
-					return err
-				}
-
-				bc.LastHash = block.Hash
-				bc.ChainLength = block.Number + 1
-
-				bc.logger.Infow("Saved block", "prev", lastBlock.Hash,
-					"hash", block.Hash, "number", block.Number, "txs", len(block.Transactions))
-
-				return nil
-			})
-		})
+		return nil
 	})
 }
 
-func (bc *Blockchain) GetBlock(hash common.Hash) (Block, error) {
-	var block Block
+func (bc *Blockchain) GetBlock(hash common.Hash) (types.Block, error) {
+	var block types.Block
 
 	err := bc.db.View(func(txn *badger.Txn) error {
 		if item, err := txn.Get(hash.Bytes()); err != nil {

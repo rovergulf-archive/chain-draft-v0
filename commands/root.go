@@ -188,5 +188,4 @@ func initZapLogger() {
 	}
 
 	logger = l.Sugar()
-	viper.Set("logger", logger)
 }

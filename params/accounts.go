@@ -11,5 +11,5 @@ var RovergulfHardwarePaymentAccounts = []common.Address{
 }
 
 var RovergulfTreasurerAccounts = []common.Address{
-	common.HexToAddress("0x2b2ee84325363350996487e45ebf487945a2547b"),
+	common.HexToAddress("0x3c0b3b41a1e027d3E759612Af08844f1cca0DdE3"),
 }

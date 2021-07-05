@@ -4,8 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
+## 5 Jul 2021
 
-## 3 Jul 2021
+### Added
+- Transaction fee calculation
+
+### Changed
+- Block and Balance structs moved to `core/types` package
+
+### Fixed
+
+### Removed
+
+
+## 4 Jul 2021
 
 ### Added
 - more `params` package constants, to be used in network consensus verification
@@ -16,9 +28,7 @@ All notable changes to this project will be documented in this file.
 - `core` logic now separated from its types, as it would represent database interface of blockchain
 - some of `core` package used types now moved to `types` subdirectory package
 - No etherium **Gas** naming, use **Nether** as the lowest denomination of **Rovergulf Native Token**
-- `address` flag usage for cli application would be optimized 
-
-### Fixed
+- `address` flag usage for cli application would be optimized
 
 ### Removed
 - `node-id` flag usage

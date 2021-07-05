@@ -7,7 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/rovergulf/rbn/core"
+	"github.com/rovergulf/rbn/core/types"
 	"github.com/rovergulf/rbn/wallets"
 	"net/http"
 )
@@ -151,7 +151,7 @@ func (n *Node) txAdd(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nonce := n.bc.GetNextAccountNonce(from)
-	tx, err := core.NewTransaction(from, common.HexToAddress(req.To), req.Value, nonce, 0, 0, req.Data)
+	tx, err := types.NewTransaction(from, common.HexToAddress(req.To), req.Value, nonce, req.Data)
 	if err != nil {
 		n.logger.Errorf("Unable to create new transaction: %s", err)
 		n.httpResponse(w, err, http.StatusBadRequest)

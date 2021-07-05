@@ -4,6 +4,7 @@ import (
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/opentracing/opentracing-go"
+	"github.com/rovergulf/rbn/core/types"
 	"go.uber.org/zap"
 )
 
@@ -28,8 +29,8 @@ func (bc *Blockchain) Iterator() *BlockchainIterator {
 }
 
 // Next returns next block starting from the tip
-func (i *BlockchainIterator) Next() (*Block, error) {
-	var block *Block
+func (i *BlockchainIterator) Next() (*types.Block, error) {
+	var block *types.Block
 
 	if err := i.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(i.CurrentHash.Bytes())
@@ -38,7 +39,7 @@ func (i *BlockchainIterator) Next() (*Block, error) {
 		}
 
 		return item.Value(func(val []byte) error {
-			var nextBlock Block
+			var nextBlock types.Block
 			if err := nextBlock.Deserialize(val); err != nil {
 				i.logger.Errorf("Unable to deserialize block: %s", err)
 				return err

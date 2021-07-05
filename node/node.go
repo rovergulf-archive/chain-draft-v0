@@ -60,7 +60,7 @@ type Node struct {
 
 	pendingTXs map[common.Hash]types.SignedTx
 
-	newSyncBlocks chan core.Block
+	newSyncBlocks chan types.Block
 	newSyncTXs    chan types.SignedTx
 
 	raftStorage *raft.MemoryStorage
@@ -99,7 +99,7 @@ func New(opts params.Options) (*Node, error) {
 		},
 		pendingTXs:    make(map[common.Hash]types.SignedTx),
 		newSyncTXs:    make(chan types.SignedTx),
-		newSyncBlocks: make(chan core.Block),
+		newSyncBlocks: make(chan types.Block),
 		//Lock:       new(sync.RWMutex),
 	}
 
@@ -370,7 +370,7 @@ func (n *Node) generateBlock(ctx context.Context) error {
 		Coinbase:  n.account.Address(),
 	}
 
-	newBlock := core.NewBlock(header, txs)
+	newBlock := types.NewBlock(header, txs, nil)
 	if err := newBlock.SetHash(); err != nil {
 		return err
 	}
@@ -384,7 +384,7 @@ func (n *Node) generateBlock(ctx context.Context) error {
 	return nil
 }
 
-func (n *Node) removeAppliedPendingTXs(block *core.Block) {
+func (n *Node) removeAppliedPendingTXs(block *types.Block) {
 	if len(block.Transactions) > 0 && len(n.pendingTXs) > 0 {
 		n.logger.Info("Updating in-memory Pending TXs Pool:")
 	}
@@ -398,7 +398,7 @@ func (n *Node) removeAppliedPendingTXs(block *core.Block) {
 
 		hash := common.BytesToHash(txHash)
 		if _, exists := n.pendingTXs[hash]; exists {
-			n.logger.Info("Archiving mined TX: %s", hash)
+			n.logger.Infof("Archiving mined TX: %s", hash)
 
 			delete(n.pendingTXs, hash)
 		}

@@ -12,7 +12,7 @@ import (
 type Genesis struct {
 	ChainId     string         `json:"chain_id" yaml:"chain_id"`
 	GenesisTime int64          `json:"genesis_time" yaml:"genesis_time"`
-	NetherLimit uint64         `json:"nether_limit" yaml:"nether_limit"`
+	NetherPrice uint64         `json:"nether_limit" yaml:"nether_limit"`
 	Nonce       uint64         `json:"nonce" yaml:"nonce"`
 	Coinbase    common.Address `json:"coinbase" yaml:"coinbase"`
 	Symbol      string         `json:"symbol" yaml:"symbol"`
@@ -26,15 +26,15 @@ type Genesis struct {
 func DevNetGenesis() *Genesis {
 	return &Genesis{
 		ChainId:     params.OpenDevNetworkId,
-		GenesisTime: 1625300000,
-		NetherLimit: 21000,
+		GenesisTime: 1625422671,
+		NetherPrice: 21000,
 		Nonce:       0,
 		Coinbase:    common.Address{},
 		Symbol:      "Nether",
 		Units:       "Wei", // in favor of Etherium native denomination
 		ParentHash:  common.Hash{},
 		Alloc:       developerNetAlloc(),
-		ExtraData:   []byte("0x00000000000000000000000000000000000000"),
+		ExtraData:   []byte{},
 	}
 }
 
@@ -42,19 +42,18 @@ func DevNetGenesis() *Genesis {
 func DefaultMainNetGenesis() *Genesis {
 	return &Genesis{
 		ChainId:     params.MainNetworkId,
-		GenesisTime: 1625319335,
-		NetherLimit: 21000, // 6942000
+		GenesisTime: 1625422671,
+		NetherPrice: 21000,
 		Nonce:       0,
-		Coinbase:    common.Address{},
-		Symbol:      "RNT",    //
-		Units:       "Nether", //
-		ParentHash:  common.Hash{},
+		Coinbase:    common.HexToAddress("0x3c0b3b41a1e027d3E759612Af08844f1cca0DdE3"),
+		Symbol:      "RNT",    // abbreviation for Rovergulf Native Token
+		Units:       "Nether", // is like it powered by atoms or quantum
 		Alloc:       defaultMainNetAlloc(),
-		ExtraData:   []byte("0x00000000000000000000000000000000000000"),
+		ExtraData:   []byte{},
 	}
 }
 
-// Serialize encodes genesis with gob encoding
+// Serialize binary encodes genesis
 func (g Genesis) Serialize() ([]byte, error) {
 	var result bytes.Buffer
 	encoder := gob.NewEncoder(&result)
@@ -65,18 +64,18 @@ func (g Genesis) Serialize() ([]byte, error) {
 	return result.Bytes(), nil
 }
 
-// Deserialize decodes gob value to genesis
+// Deserialize decodes binary value to genesis
 func (g *Genesis) Deserialize(data []byte) error {
 	decoder := gob.NewDecoder(bytes.NewReader(data))
 	return decoder.Decode(g)
 }
 
-func (g *Genesis) ToBlock() (*Block, error) {
+func (g *Genesis) ToBlock() (*types.Block, error) {
 	var txs []types.SignedTx
 
 	for addr := range g.Alloc {
 		coinbase := g.Alloc[addr]
-		tx, err := NewTransaction(g.Coinbase, addr, coinbase.Balance, 0, g.NetherLimit, params.NetherPrice, g.ExtraData)
+		tx, err := types.NewTransaction(g.Coinbase, addr, coinbase.Balance, 0, g.ExtraData)
 		if err != nil {
 			return nil, err
 		}
@@ -91,7 +90,7 @@ func (g *Genesis) ToBlock() (*Block, error) {
 		Coinbase:  g.Coinbase,
 	}
 
-	b := NewBlock(header, txs)
+	b := types.NewBlock(header, txs, nil)
 	if err := b.SetHash(); err != nil {
 		return nil, err
 	}

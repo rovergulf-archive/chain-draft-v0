@@ -1,43 +1,17 @@
 package core
 
 import (
-	"bytes"
-	"encoding/gob"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/rovergulf/rbn/core/types"
 )
 
 var (
 	balancesPrefix = []byte("balances/")
 )
 
-type Balance struct {
-	Address common.Address `json:"address" yaml:"address"`
-	Balance uint64         `json:"balance" yaml:"balance"`
-	Nonce   uint64         `json:"nonce" yaml:"nonce"`
-}
-
-func (b *Balance) Serialize() ([]byte, error) {
-	var result bytes.Buffer
-	encoder := gob.NewEncoder(&result)
-	if err := encoder.Encode(*b); err != nil {
-		return nil, err
-	}
-
-	return result.Bytes(), nil
-}
-
-func (b *Balance) Deserialize(data []byte) error {
-	decoder := gob.NewDecoder(bytes.NewReader(data))
-	if err := decoder.Decode(b); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (bc *Blockchain) GetBalance(addr common.Address) (*Balance, error) {
-	var balance Balance
+func (bc *Blockchain) GetBalance(addr common.Address) (*types.Balance, error) {
+	var balance types.Balance
 
 	key := append(balancesPrefix, addr.Bytes()...)
 	if err := bc.db.View(func(txn *badger.Txn) error {
@@ -56,8 +30,8 @@ func (bc *Blockchain) GetBalance(addr common.Address) (*Balance, error) {
 	return &balance, nil
 }
 
-func (bc *Blockchain) ListBalances() ([]*Balance, error) {
-	var balances []*Balance
+func (bc *Blockchain) ListBalances() ([]*types.Balance, error) {
+	var balances []*types.Balance
 
 	if err := bc.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
@@ -66,7 +40,7 @@ func (bc *Blockchain) ListBalances() ([]*Balance, error) {
 		defer it.Close()
 		for it.Rewind(); it.Valid(); it.Next() {
 			item := it.Item()
-			var balance Balance
+			var balance types.Balance
 
 			if err := item.Value(func(val []byte) error {
 				return balance.Deserialize(val)
@@ -94,5 +68,5 @@ func (bc *Blockchain) GetNextAccountNonce(addr common.Address) uint64 {
 		return 0
 	}
 
-	return b.Nonce
+	return b.Nonce + 1
 }

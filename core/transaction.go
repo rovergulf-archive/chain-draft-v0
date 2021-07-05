@@ -5,7 +5,6 @@ import (
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rovergulf/rbn/core/types"
-	"time"
 )
 
 const (
@@ -17,24 +16,6 @@ var (
 	txPrefix       = []byte("tx/")
 	txPrefixLength = len(txPrefix)
 )
-
-// NewTransaction creates a new transaction
-func NewTransaction(from, to common.Address, amount uint64, nonce uint64, nether, netherPrice uint64, data []byte) (types.Transaction, error) {
-	if from == to {
-		return types.Transaction{}, fmt.Errorf("transaction cannot be sent to yourself")
-	}
-
-	return types.Transaction{
-		From:        from,
-		To:          to,
-		Value:       amount,
-		Nonce:       nonce,
-		Nether:      nether,
-		NetherPrice: netherPrice,
-		Data:        data,
-		Time:        time.Now().Unix(),
-	}, nil
-}
 
 func (bc *Blockchain) ListTransactions() ([]types.SignedTx, error) {
 	var txs []types.SignedTx
@@ -131,12 +112,12 @@ func (bc *Blockchain) ApplyTx(tx types.SignedTx) error {
 	}
 
 	return bc.db.Update(func(txn *badger.Txn) error {
-		senderKey := append(balancesPrefix, fromAddr.Address.Bytes()...)
+		senderKey := append(balancesPrefix, fromAddr.Account.Bytes()...)
 		if err := txn.Set(senderKey, from); err != nil {
 			return err
 		}
 
-		recipientKey := append(balancesPrefix, toAddr.Address.Bytes()...)
+		recipientKey := append(balancesPrefix, toAddr.Account.Bytes()...)
 		return txn.Set(recipientKey, to)
 	})
 }
