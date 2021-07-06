@@ -34,12 +34,12 @@ func (bc *Blockchain) NewGenesisBlockWithRewrite(ctx context.Context) error {
 			return err
 		}
 
-		if err := txn.Set(genesisBlock.Hash.Bytes(), serializedBLock); err != nil {
+		if err := txn.Set(genesisBlock.BlockHeader.Hash.Bytes(), serializedBLock); err != nil {
 			bc.logger.Errorf("Unable to put genesis block: %s", err)
 			return err
 		}
 
-		if err := txn.Set([]byte("lh"), genesisBlock.Hash.Bytes()); err != nil {
+		if err := txn.Set([]byte("lh"), genesisBlock.BlockHeader.Hash.Bytes()); err != nil {
 			bc.logger.Errorf("Unable to put genesis block hash: %s", err)
 			return err
 		}
@@ -66,7 +66,7 @@ func (bc *Blockchain) NewGenesisBlockWithRewrite(ctx context.Context) error {
 		}
 
 		bc.genesis = gen
-		bc.LastHash = genesisBlock.Hash
+		bc.LastHash = genesisBlock.BlockHeader.Hash
 		return nil
 	})
 }
@@ -77,7 +77,7 @@ func (bc *Blockchain) loadGenesis(ctx context.Context) error {
 		if err != nil {
 			// is it ok??
 			if err == badger.ErrKeyNotFound {
-				return bc.NewGenesisBlockWithRewrite(ctx)
+				return ErrGenesisNotExists
 			}
 			bc.logger.Errorf("Unable to load genesis from storage: %s", err)
 			return err
@@ -89,9 +89,9 @@ func (bc *Blockchain) loadGenesis(ctx context.Context) error {
 	})
 }
 
-func (bc *Blockchain) GetGenesis() (*Genesis, error) {
+func (bc *Blockchain) GetGenesis(ctx context.Context) (*Genesis, error) {
 	if bc.genesis == nil {
-		if err := bc.loadGenesis(context.Background()); err != nil {
+		if err := bc.loadGenesis(ctx); err != nil {
 			return nil, err
 		}
 	}

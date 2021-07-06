@@ -135,9 +135,11 @@ func blockchainGenesisCmd() *cobra.Command {
 		Short:   "Show chain genesis",
 		PreRunE: prepareBlockchain,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 			defer blockChain.Shutdown()
 
-			gen, err := blockChain.GetGenesis()
+			gen, err := blockChain.GetGenesis(ctx)
 			if err != nil {
 				return err
 			}

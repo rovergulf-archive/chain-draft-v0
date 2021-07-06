@@ -72,6 +72,11 @@ func (n *Node) setupNodeAccount() error {
 				return err
 			}
 
+			if _, err := n.bc.NewBalance(newWallet.Address(), 0); err != nil {
+				n.logger.Errorf("Unable to create node balance")
+				return err
+			}
+
 			if err := n.saveNodeAccount(newWallet); err != nil {
 				n.logger.Errorf("Unable to save node account to node storage: %s", err)
 				return err

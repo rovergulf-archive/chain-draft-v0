@@ -38,7 +38,7 @@ func (bh *BlockHeader) Deserialize(d []byte) error {
 }
 
 // NewBlock creates and returns Block
-func NewBlock(header BlockHeader, txs []SignedTx, receipts []*Receipt) *Block {
+func NewBlock(header BlockHeader, txs []SignedTx) *Block {
 	return &Block{
 		BlockHeader:  header,
 		Transactions: txs,
@@ -55,28 +55,25 @@ type Block struct {
 	//ReceivedAt int64 `json:"received_at" yaml:"received_at"`
 }
 
-// SetHash sets a hash of the block
-func (b *Block) SetHash() error {
+// Hash returns a hash of the block
+func (b *Block) Hash() ([]byte, error) {
 	enc, err := b.Serialize()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	hash := sha256.Sum256(enc)
-	b.Hash = hash
-	return nil
+	return hash[:], nil
 }
 
 // Size returns encoded block value byte length
-func (b *Block) Size() error {
+func (b *Block) Size() (int, error) {
 	enc, err := b.Serialize()
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	hash := sha256.Sum256(enc)
-	b.Hash = hash
-	return nil
+	return len(enc), nil
 }
 
 // HashTransactions returns a hash of the transactions in the block

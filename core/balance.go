@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rovergulf/rbn/core/types"
@@ -69,4 +70,30 @@ func (bc *Blockchain) GetNextAccountNonce(addr common.Address) uint64 {
 	}
 
 	return b.Nonce + 1
+}
+
+func (bc *Blockchain) NewBalance(addr common.Address, value uint64) (*types.Balance, error) {
+	balance := &types.Balance{
+		Address: addr,
+		Balance: value,
+		Nonce:   0,
+	}
+
+	data, err := balance.Serialize()
+	if err != nil {
+		return nil, err
+	}
+
+	key := append(balancesPrefix, addr.Bytes()...)
+	if err := bc.db.Update(func(txn *badger.Txn) error {
+		if _, err := txn.Get(key); err == nil {
+			return fmt.Errorf("'%s' already exists", addr)
+		}
+
+		return txn.Set(key, data)
+	}); err != nil {
+		return nil, err
+	}
+
+	return balance, nil
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/node"
 	"github.com/rovergulf/rbn/params"
+	"github.com/rovergulf/rbn/pkg/traceutil"
 	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -111,7 +112,7 @@ func initConfig() {
 
 func setConfigDefaults() {
 	viper.SetDefault("metrics", true)
-	viper.SetDefault("jaeger_trace", os.Getenv("JAEGER_TRACE"))
+	viper.SetDefault(traceutil.JaegerTraceConfigKey, os.Getenv("JAEGER_TRACE"))
 
 	viper.SetDefault("node_id", "")
 

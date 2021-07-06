@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
@@ -20,6 +21,10 @@ const (
 
 var (
 	emptyHash = common.HexToHash("")
+)
+
+var (
+	ErrGenesisNotExists = errors.New("genesis does not exists")
 )
 
 type Blockchain struct {
@@ -68,11 +73,11 @@ func (bc *Blockchain) Run(ctx context.Context) error {
 		return err
 	}
 
-	return bc.loadChainState()
+	return bc.LoadChainState(ctx)
 }
 
-// loadChainState loads Blockchain state from database
-func (bc *Blockchain) loadChainState() error {
+// LoadChainState loads Blockchain state from database
+func (bc *Blockchain) LoadChainState(ctx context.Context) error {
 	return bc.db.View(func(txn *badger.Txn) error {
 		lh, err := txn.Get([]byte("lh"))
 		if err != nil {
@@ -101,7 +106,7 @@ func (bc *Blockchain) loadChainState() error {
 					return err
 				}
 
-				bc.LastHash = b.Hash
+				bc.LastHash = b.BlockHeader.Hash
 				bc.ChainLength = b.Number + 1
 				return nil
 			})
@@ -118,8 +123,8 @@ func (bc *Blockchain) ValidateNextBlock(next *types.Block) error {
 	if bytes.Compare(next.PrevHash.Bytes(), bc.LastHash.Bytes()) != 0 {
 		return fmt.Errorf("invalid previous hash: %s", next.PrevHash)
 	}
-	if bytes.Compare(next.Hash.Bytes(), emptyHash.Bytes()) == 0 {
-		return fmt.Errorf("invalid block hash: %s", next.Hash)
+	if bytes.Compare(next.BlockHeader.Hash.Bytes(), emptyHash.Bytes()) == 0 {
+		return fmt.Errorf("invalid block hash: %s", next.BlockHeader.Hash)
 	}
 	if next.Number != bc.ChainLength {
 		return fmt.Errorf("invalid block number: %d; expected: %d", next.Number, bc.ChainLength+1)
@@ -139,16 +144,16 @@ func (bc *Blockchain) AddBlock(block *types.Block) error {
 	}
 
 	return bc.db.Update(func(txn *badger.Txn) error {
-		if err := txn.Set(block.Hash.Bytes(), blockData); err != nil {
+		if err := txn.Set(block.BlockHeader.Hash.Bytes(), blockData); err != nil {
 			return err
 		}
 
-		if err := txn.Set([]byte("lh"), block.Hash.Bytes()); err != nil {
+		if err := txn.Set([]byte("lh"), block.BlockHeader.Hash.Bytes()); err != nil {
 			bc.logger.Errorf("Unable to set last hash value: %s", err)
 			return err
 		}
 
-		bc.LastHash = block.Hash
+		bc.LastHash = block.BlockHeader.Hash
 		bc.ChainLength = block.Number + 1
 
 		bc.logger.Infow("Saved block", "prev", block.PrevHash,
@@ -188,7 +193,7 @@ func (bc *Blockchain) GetBlockHashes() ([]common.Hash, error) {
 			return nil, err
 		}
 
-		blocks = append(blocks, block.Hash)
+		blocks = append(blocks, block.BlockHeader.Hash)
 
 		if bytes.Compare(block.PrevHash.Bytes(), emptyHash.Bytes()) == 0 {
 			break

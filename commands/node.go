@@ -29,7 +29,7 @@ func nodeCmd() *cobra.Command {
 	nodeCmd.AddCommand(nodeRunCmd())
 	nodeCmd.AddCommand(nodeStopCmd())
 	nodeCmd.AddCommand(nodeAccountDumpCmd())
-	nodeCmd.AddCommand(nodeAccountDumpCmd())
+	//nodeCmd.AddCommand(nodeAccountImportCmd())
 
 	return nodeCmd
 }
@@ -118,7 +118,8 @@ func nodeAccountDumpCmd() *cobra.Command {
 	nodeAccountDumpCmd := &cobra.Command{
 		Use:   "account-dump",
 		Short: "Export node account key",
-		Long:  ``,
+		Long: `Exports node default account CryptJSON to specified file 
+and prints out mnemonic passphrase to unlock it`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			//ctx, cancel := context.WithCancel(context.Background())
 			//defer cancel()
@@ -150,4 +151,29 @@ func nodeAccountDumpCmd() *cobra.Command {
 	nodeAccountDumpCmd.MarkFlagRequired("file")
 
 	return nodeAccountDumpCmd
+}
+
+func nodeAccountImportCmd() *cobra.Command {
+	nodeAccountImportCmd := &cobra.Command{
+		Use:   "account-import",
+		Short: "Import node account key",
+		Long: `Imports node account key from specified CryptoJSON file
+and sets it as node default`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			//ctx, cancel := context.WithCancel(context.Background())
+			//defer cancel()
+			defer localNode.Shutdown()
+
+			return writeOutput(cmd, map[string]interface{}{
+				"address": "w.Address()",
+				"auth":    "w.Auth",
+			})
+		},
+		TraverseChildren: true,
+	}
+
+	nodeAccountImportCmd.Flags().StringP("file", "f", "", "Specify key file path to read")
+	nodeAccountImportCmd.MarkFlagRequired("file")
+
+	return nodeAccountImportCmd
 }

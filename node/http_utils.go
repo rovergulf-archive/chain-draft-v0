@@ -69,6 +69,7 @@ func (h *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Println("h.tracer", h.tracer != nil)
 	if h.tracer != nil {
 		span := h.tracer.StartSpan(strings.TrimPrefix(r.URL.Path, "/"))
 		span.SetTag("host", r.Host)
@@ -147,7 +148,7 @@ func (n *Node) healthCheck(w http.ResponseWriter, r *http.Request) {
 		"timestamp":   time.Now().Unix(),
 		"run_date":    params.RunDate.Format(time.RFC1123),
 		"node_status": "healthy",
-		"is_mining":   n.isMining,
+		"in_gamble":   n.inGenRace,
 	})
 }
 

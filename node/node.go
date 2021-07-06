@@ -6,7 +6,6 @@ import (
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/mux"
-	"github.com/opentracing/opentracing-go"
 	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/core/types"
 	"github.com/rovergulf/rbn/database/badgerdb"
@@ -15,14 +14,9 @@ import (
 	"github.com/rovergulf/rbn/pkg/traceutil"
 	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/viper"
-	"github.com/uber/jaeger-client-go"
-	jconf "github.com/uber/jaeger-client-go/config"
-	"github.com/uber/jaeger-lib/metrics/prometheus"
 	"go.etcd.io/etcd/raft/v3"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-	"io"
-	"net"
 	"os"
 	"sync"
 	"time"
@@ -54,7 +48,7 @@ type Node struct {
 	grpcServer  *grpc.Server
 	httpHandler httpServer
 
-	isMining bool
+	inGenRace bool
 
 	knownPeers knownPeers
 
@@ -87,13 +81,14 @@ func New(opts params.Options) (*Node, error) {
 		httpHandler: httpServer{
 			router: mux.NewRouter(),
 			logger: opts.Logger,
+			tracer: opts.Tracer,
 		},
 		config: opts,
 		bc:     nil,
 		logger: opts.Logger,
 		knownPeers: knownPeers{
 			peers: map[string]PeerNode{
-				pn.TcpAddress(): pn,
+				pn.Account.String(): pn,
 			},
 			lock: new(sync.RWMutex),
 		},
@@ -101,15 +96,6 @@ func New(opts params.Options) (*Node, error) {
 		newSyncTXs:    make(chan types.SignedTx),
 		newSyncBlocks: make(chan types.Block),
 		//Lock:       new(sync.RWMutex),
-	}
-
-	tracer, err := traceutil.NewTracerFromViperConfig()
-	if err != nil {
-		if err != traceutil.ErrCollectorUrlNotSpecified {
-			return nil, err
-		}
-	} else {
-		n.tracer = tracer
 	}
 
 	return n, nil
@@ -123,6 +109,16 @@ func (n *Node) Init(ctx context.Context) error {
 		})
 		n.Shutdown()
 	})
+
+	tracer, err := traceutil.NewTracerFromViperConfig()
+	if err != nil {
+		if err != traceutil.ErrCollectorUrlNotSpecified {
+			return err
+		}
+	} else {
+		n.tracer = tracer
+		n.httpHandler.tracer = tracer
+	}
 
 	db, err := badgerdb.OpenDB(viper.GetString("data_dir"), badger.DefaultOptions(n.config.NodeFilePath))
 	if err != nil {
@@ -139,7 +135,7 @@ func (n *Node) Init(ctx context.Context) error {
 		n.bc = chain
 	}
 
-	if err := chain.Run(ctx); err != nil {
+	if err := chain.LoadChainState(ctx); err != nil {
 		n.logger.Errorf("Unable to continue blockchain: %s", err)
 		return err
 	}
@@ -249,66 +245,9 @@ func (n *Node) IsKnownPeer(peer PeerNode) bool {
 	return ok
 }
 
-func (n *Node) initOpentracing(address string) (opentracing.Tracer, io.Closer, error) {
-	metrics := prometheus.New()
-
-	traceTransport, err := jaeger.NewUDPTransport(address, 0)
-	if err != nil {
-		n.logger.Errorf("Unable to setup tracing agent connection: %s", err)
-		return nil, nil, err
-	}
-
-	tracer, closer, err := jconf.Configuration{
-		ServiceName: "rbn",
-	}.NewTracer(
-		jconf.Sampler(jaeger.NewConstSampler(true)),
-		jconf.Reporter(jaeger.NewRemoteReporter(
-			traceTransport,
-			jaeger.ReporterOptions.Logger(jaeger.StdLogger)),
-		),
-		jconf.Metrics(metrics),
-	)
-	if err != nil {
-		n.logger.Errorf("Unable to start tracer: %s", err)
-		return nil, nil, err
-	}
-
-	n.logger.Debugw("Jaeger tracing client initialized", "collector_url", address)
-	return tracer, closer, nil
-}
-
-func (n *Node) collectNetInterfaces() error {
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		n.logger.Errorf("Unable to get net interfaces: %s", err)
-		return err
-	}
-
-	for _, i := range ifaces {
-		addrs, err := i.Addrs()
-		if err != nil {
-			n.logger.Errorf("Unable to get net interface addrs: %s", err)
-			return err
-		}
-		for _, addr := range addrs {
-			var ip net.IP
-			switch v := addr.(type) {
-			case *net.IPNet:
-				ip = v.IP
-				n.logger.Debugf("Discovered local IP network: %s", ip)
-			case *net.IPAddr:
-				ip = v.IP
-				n.logger.Debugf("Discovered local IP address: %s", ip)
-			}
-		}
-	}
-
-	return nil
-}
-
 func (n *Node) race(ctx context.Context) {
 	var miningCtx context.Context
-	var stopCurrentMining context.CancelFunc
+	var stopCurrentRace context.CancelFunc
 
 	ticker := time.NewTicker(time.Second * 10)
 
@@ -316,122 +255,31 @@ func (n *Node) race(ctx context.Context) {
 		select {
 		case <-ticker.C:
 			go func() {
-				if len(n.pendingTXs) > 0 && !n.isMining {
+				if len(n.pendingTXs) > 0 && !n.inGenRace {
 					n.logger.Debugw("There is transactions available", "txs", len(n.pendingTXs))
-					n.isMining = true
+					n.inGenRace = true
 
-					miningCtx, stopCurrentMining = context.WithCancel(ctx)
-					// TODO rename
+					miningCtx, stopCurrentRace = context.WithCancel(ctx)
 					if err := n.generateBlock(miningCtx); err != nil {
-						n.logger.Errorf("Failed to mine pending txs: %s", err)
+						n.logger.Errorf("Failed to generate new block: %s", err)
 					}
 
-					n.isMining = false
+					n.inGenRace = false
 				}
 			}()
 
 		case block, _ := <-n.newSyncBlocks:
-			n.logger.Debugw("Proposed block appeared", "is_mining", n.isMining)
-			if n.isMining {
-				n.logger.Warnf("Peer mined next Block '%s' faster :(", block.Hash.Hex())
+			n.logger.Debugw("Proposed block appeared", "is_racing", n.inGenRace)
+			if n.inGenRace {
+				n.logger.Warnf("Another peer has won the game '%s'! :(", block.BlockHeader.Hash.Hex())
 				n.removeAppliedPendingTXs(&block)
-				stopCurrentMining()
+				stopCurrentRace()
 			}
 
 		case <-ctx.Done():
 			ticker.Stop()
-			n.logger.Debug("Mining context cancelled")
+			n.logger.Debug("Party context cancelled")
 			break
 		}
 	}
-}
-
-func (n *Node) generateBlock(ctx context.Context) error {
-	if len(n.pendingTXs) == 0 {
-		return fmt.Errorf("no transactions available")
-	}
-
-	var txs []types.SignedTx
-
-	for i := range n.pendingTXs {
-		tx := n.pendingTXs[i]
-		txs = append(txs, tx)
-	}
-
-	lb, err := n.bc.GetBlock(n.bc.LastHash)
-	if err != nil {
-		return err
-	}
-
-	header := types.BlockHeader{
-		PrevHash:  lb.Hash,
-		Number:    lb.Number + 1,
-		Timestamp: time.Now().Unix(),
-		Coinbase:  n.account.Address(),
-	}
-
-	newBlock := types.NewBlock(header, txs, nil)
-	if err := newBlock.SetHash(); err != nil {
-		return err
-	}
-
-	if err := n.bc.AddBlock(newBlock); err != nil {
-		return err
-	}
-
-	n.removeAppliedPendingTXs(newBlock)
-
-	return nil
-}
-
-func (n *Node) removeAppliedPendingTXs(block *types.Block) {
-	if len(block.Transactions) > 0 && len(n.pendingTXs) > 0 {
-		n.logger.Info("Updating in-memory Pending TXs Pool:")
-	}
-
-	for _, tx := range block.Transactions {
-		txHash, err := tx.Transaction.Hash()
-		if err != nil {
-			n.logger.Warnf("Unable to get transaction hash: %s", err)
-			continue
-		}
-
-		hash := common.BytesToHash(txHash)
-		if _, exists := n.pendingTXs[hash]; exists {
-			n.logger.Infof("Archiving mined TX: %s", hash)
-
-			delete(n.pendingTXs, hash)
-		}
-	}
-}
-
-func (n *Node) AddPendingTX(tx types.SignedTx, peer PeerNode) error {
-	ok, err := tx.IsAuthentic()
-	if err != nil {
-		return err
-	}
-
-	if !ok {
-		// TODO set report counter and attacker account purge
-		return fmt.Errorf("wrong TX. Sender '%s' is forged", tx.From)
-	}
-
-	txHash, err := tx.Transaction.Hash()
-	if err != nil {
-		return err
-	}
-
-	hash := common.BytesToHash(txHash)
-
-	if err := n.bc.SaveTx(hash, tx); err != nil {
-		return err
-	}
-
-	if err := n.bc.ApplyTx(tx); err != nil {
-		return err
-	}
-
-	n.pendingTXs[hash] = tx
-
-	return nil
 }

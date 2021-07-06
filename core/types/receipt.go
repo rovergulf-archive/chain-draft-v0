@@ -2,6 +2,7 @@ package types
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/gob"
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -16,10 +17,9 @@ type Receipt struct {
 	NetherUsed  uint64 `json:"nether_used" yaml:"nether_used"`
 	NetherPrice uint64 `json:"nether_price" yaml:"nether_price"`
 
-	BlockHash        common.Hash `json:"block_hash,omitempty" yaml:"block_hash"`
-	BlockNumber      uint64      `json:"block_number,omitempty" yaml:"block_number"`
-	TxHash           common.Hash `json:"tx_hash" yaml:"tx_hash"`
-	TransactionIndex int         `json:"transaction_index" yaml:"transaction_index"`
+	BlockHash   common.Hash `json:"block_hash,omitempty" yaml:"block_hash"`
+	BlockNumber uint64      `json:"block_number,omitempty" yaml:"block_number"`
+	TxHash      common.Hash `json:"tx_hash" yaml:"tx_hash"`
 }
 
 // Serialize serializes receipt
@@ -36,4 +36,14 @@ func (r Receipt) Serialize() ([]byte, error) {
 func (r *Receipt) Deserialize(d []byte) error {
 	decoder := gob.NewDecoder(bytes.NewReader(d))
 	return decoder.Decode(r)
+}
+
+func (r *Receipt) Hash() ([]byte, error) {
+	data, err := r.Serialize()
+	if err != nil {
+		return nil, err
+	}
+
+	hash := sha256.Sum256(data)
+	return hash[:], nil
 }

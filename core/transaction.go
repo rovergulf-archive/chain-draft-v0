@@ -7,11 +7,6 @@ import (
 	"github.com/rovergulf/rbn/core/types"
 )
 
-const (
-	TxFee   = uint64(50)
-	TxLimit = uint64(1 << 10)
-)
-
 var (
 	txPrefix       = []byte("tx/")
 	txPrefixLength = len(txPrefix)
@@ -78,21 +73,21 @@ func (bc *Blockchain) SaveTx(txHash common.Hash, tx types.SignedTx) error {
 	})
 }
 
-func (bc *Blockchain) ApplyTx(tx types.SignedTx) error {
+func (bc *Blockchain) ApplyTx(txHash common.Hash, tx types.SignedTx) (*types.Receipt, error) {
 	fromAddr, err := bc.GetBalance(tx.From)
 	if err != nil {
 		bc.logger.Errorf("Unable to get sender balance: %s", err)
-		return err
+		return nil, err
 	}
 
 	toAddr, err := bc.GetBalance(tx.To)
 	if err != nil {
 		bc.logger.Errorf("Unable to get recipient balance: %s", err)
-		return err
+		return nil, err
 	}
 
 	if tx.Cost() > fromAddr.Balance {
-		return fmt.Errorf("wrong TX. Sender '%s' balance is %d TBB. Tx cost is %d TBB",
+		return nil, fmt.Errorf("wrong TX. Sender '%s' balance is %d TBB. Tx cost is %d TBB",
 			tx.From.String(), fromAddr.Balance, tx.Cost())
 	}
 
@@ -103,15 +98,23 @@ func (bc *Blockchain) ApplyTx(tx types.SignedTx) error {
 
 	from, err := fromAddr.Serialize()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	to, err := toAddr.Serialize()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return bc.db.Update(func(txn *badger.Txn) error {
+	receipt := &types.Receipt{
+		Addr:        fromAddr.Address,
+		Balance:     fromAddr.Balance,
+		NetherUsed:  tx.Nether,
+		NetherPrice: tx.NetherPrice,
+		TxHash:      txHash,
+	}
+
+	return receipt, bc.db.Update(func(txn *badger.Txn) error {
 		senderKey := append(balancesPrefix, fromAddr.Address.Bytes()...)
 		if err := txn.Set(senderKey, from); err != nil {
 			return err

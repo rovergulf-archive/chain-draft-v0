@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - Transaction fee calculation
+- Use receipts as transaction applied return result
 
 ### Changed
 - Block and Balance structs moved to `core/types` package

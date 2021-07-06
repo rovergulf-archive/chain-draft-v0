@@ -6,7 +6,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rovergulf/rbn/core/types"
 	"github.com/rovergulf/rbn/params"
-	"time"
 )
 
 type Genesis struct {
@@ -74,11 +73,12 @@ func (g *Genesis) ToBlock() (*types.Block, error) {
 	var txs []types.SignedTx
 
 	for addr := range g.Alloc {
-		coinbase := g.Alloc[addr]
-		tx, err := types.NewTransaction(g.Coinbase, addr, coinbase.Balance, 0, g.ExtraData)
+		alloc := g.Alloc[addr]
+		tx, err := types.NewTransaction(g.Coinbase, addr, alloc.Balance, 0, g.ExtraData)
 		if err != nil {
 			return nil, err
 		}
+		tx.Time = g.GenesisTime
 
 		txs = append(txs, types.SignedTx{Transaction: tx})
 	}
@@ -86,14 +86,16 @@ func (g *Genesis) ToBlock() (*types.Block, error) {
 	header := types.BlockHeader{
 		PrevHash:  g.ParentHash,
 		Number:    g.Nonce,
-		Timestamp: time.Now().Unix(),
+		Timestamp: g.GenesisTime,
 		Coinbase:  g.Coinbase,
 	}
 
-	b := types.NewBlock(header, txs, nil)
-	if err := b.SetHash(); err != nil {
+	b := types.NewBlock(header, txs)
+	hash, err := b.Hash()
+	if err != nil {
 		return nil, err
 	}
+	b.BlockHeader.Hash = common.BytesToHash(hash)
 
 	return b, nil
 }

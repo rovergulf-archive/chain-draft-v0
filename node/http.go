@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -48,34 +49,35 @@ func (n *Node) nodeInfo(w http.ResponseWriter, r *http.Request) {
 	//ctx := r.Context()
 	lb, err := n.bc.GetBlock(n.bc.LastHash)
 	if err != nil {
-		n.httpResponse(w, err.Error(), http.StatusInternalServerError)
-		return
+		if err != badger.ErrKeyNotFound {
+			n.httpResponse(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
-	lsm, vlog := n.bc.DbSize()
-	wLsm, wVlog := n.wm.DbSize()
-	nLsm, nVlog := n.db.Size()
-	result := StatusRes{
-		LastHash:   lb.Hash.Hex(),
-		KnownPeers: n.knownPeers.peers,
-		PendingTXs: n.pendingTXs,
-		IsMining:   n.isMining,
-		DbSize: map[string]int64{
-			"chain_lsm":    lsm,
-			"chain_vlog":   vlog,
+	bcLsm, bcVlog := n.bc.DbSize() // chain db size
+	wLsm, wVlog := n.wm.DbSize()   // wallets db size
+	nLsm, nVlog := n.db.Size()     // node db size
+
+	n.httpResponse(w, map[string]interface{}{
+		"lash_hash":   lb.BlockHeader.Hash.Hex(),
+		"pending_txs": len(n.pendingTXs),
+		"in_gen_race": n.inGenRace,
+		"db_size": map[string]int64{
+			"chain_lsm":    bcLsm,
+			"chain_vlog":   bcVlog,
 			"wallets_lsm":  wLsm,
 			"wallets_vlog": wVlog,
 			"node_lsm":     nLsm,
 			"node_vlog":    nVlog,
 		},
-	}
-
-	n.httpResponse(w, result)
+	})
 }
 
 func (n *Node) ShowGenesis(w http.ResponseWriter, r *http.Request) {
-	//ctx := r.Context()
-	gen, err := n.bc.GetGenesis()
+	ctx := r.Context()
+
+	gen, err := n.bc.GetGenesis(ctx)
 	if err != nil {
 		n.httpResponse(w, true, http.StatusInternalServerError)
 		return
@@ -158,13 +160,6 @@ func (n *Node) txAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	txHash, err := tx.Hash()
-	if err != nil {
-		n.logger.Errorf("Unable to set transaction hash: %s", err)
-		n.httpResponse(w, err, http.StatusInternalServerError)
-		return
-	}
-
 	wallet, err := n.wm.GetWallet(from, req.FromPwd)
 	if err != nil {
 		n.logger.Errorf("Unable to find stored account key: %s", err)
@@ -179,15 +174,14 @@ func (n *Node) txAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := n.AddPendingTX(signedTx, n.metadata); err != nil {
+	receipt, err := n.AddPendingTX(signedTx, n.metadata)
+	if err != nil {
 		n.logger.Errorf("Unable to add pending tx: %s", err)
 		n.httpResponse(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	n.httpResponse(w, map[string]interface{}{
-		"tx_hash": common.BytesToHash(txHash).String(),
-	})
+	n.httpResponse(w, receipt)
 }
 
 func (n *Node) txFind(w http.ResponseWriter, r *http.Request) {

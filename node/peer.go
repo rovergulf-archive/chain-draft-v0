@@ -2,7 +2,6 @@ package node
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/gob"
 	"fmt"
 	"github.com/dgraph-io/badger/v3"
@@ -84,15 +83,6 @@ func (pn *PeerNode) HttpApiAddress() string {
 	return fmt.Sprintf("%s://%s", pn.ApiProtocol(), pn.ApiAddress())
 }
 
-// GetId returns node peer id
-func (pn *PeerNode) GetId() []byte {
-	var sum []byte
-	sum = append(sum, pn.Account.Bytes()...)
-	sum = append(sum, []byte(fmt.Sprintf("%s:%d", pn.Ip, pn.Port))...)
-	hash := sha256.Sum256(sum)
-	return hash[:]
-}
-
 // addPeer saves new peer to node storage
 func (n *Node) addPeer(peer PeerNode) error {
 	n.logger.Info("n.addPeer", peer)
@@ -105,10 +95,11 @@ func (n *Node) addPeer(peer PeerNode) error {
 	n.knownPeers.lock.Lock()
 	defer n.knownPeers.lock.Unlock()
 	return n.db.Update(func(txn *badger.Txn) error {
-		if err := txn.Set(peer.GetId(), pn); err != nil {
+		key := append(peerPrefix, peer.Account.Bytes()...)
+		if err := txn.Set(key, pn); err != nil {
 			return err
 		} else {
-			n.knownPeers.peers[string(peer.GetId())] = peer
+			n.knownPeers.peers[peer.Account.String()] = peer
 		}
 		return nil
 	})
@@ -119,10 +110,11 @@ func (n *Node) removePeer(peer PeerNode) error {
 	n.knownPeers.lock.Lock()
 	defer n.knownPeers.lock.Unlock()
 	return n.db.Update(func(txn *badger.Txn) error {
-		if err := txn.Delete(peer.GetId()); err != nil {
+		key := append(peerPrefix, peer.Account.Bytes()...)
+		if err := txn.Delete(key); err != nil {
 			return err
 		} else {
-			delete(n.knownPeers.peers, string(peer.GetId()))
+			delete(n.knownPeers.peers, peer.Account.String())
 		}
 
 		return nil
