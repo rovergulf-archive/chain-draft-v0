@@ -3,15 +3,17 @@ package dgraphdb
 import (
 	"github.com/dgraph-io/dgo/v210"
 	"github.com/dgraph-io/dgo/v210/protos/api"
+	"github.com/opentracing/opentracing-go"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
-type dgraph struct {
+type dgraphDb struct {
 	*dgo.Dgraph
 
 	logger *zap.SugaredLogger
+	tracer opentracing.Tracer
 }
 
 // newClient returns dgo.Dgraph gRPC client
@@ -26,4 +28,8 @@ func newClient() (*dgo.Dgraph, error) {
 	return dgo.NewDgraphClient(
 		api.NewDgraphClient(d),
 	), nil
+}
+
+type chainDb struct {
+	dgraphDb
 }
