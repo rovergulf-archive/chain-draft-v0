@@ -1,13 +1,13 @@
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/rovergulf/rbn)
 ![GitHub tag (latest SemVer)](https://img.shields.io/github/v/tag/rovergulf/rbn)
 
-## Rovergulf Blockchain Network
+## Rovergulf BlockChain Network
 
-[RBN](https://chain.rovergulf.net) - Blockchain algorithm implemented by Rovergulf Engineers team based on [Etherium SDK](https://github.com/ethereum/go-ethereum)
+[RBN](https://chain.rovergulf.net) - BlockChain algorithm implemented by Rovergulf Engineers team based on [Etherium SDK](https://github.com/ethereum/go-ethereum)
 
 ### Information
 - Documentation: [RBN Docs](https://chain.rovergulf.net/docs)
-- Blockchain network available at `swarm.rovergulf.net`
+- BlockChain network available at `swarm.rovergulf.net`
 
 ---
 ## Development
@@ -33,7 +33,7 @@ go build
 
 ### Containers
 ```shell
-
+TBD
 ```
 
 ### Verify installation
@@ -45,9 +45,20 @@ rbn --version
 ```
 
 ---
+
+## Run node
+```shell
+rbn node run
+
+# to get more opts
+rbn node run --help
+
+# TBD: sync modes, etc
+```
+
 ## Coins
 
-### Rovergulf Native Token
+### Rovergulf Coins
 
 An extra reward for platform achievements (for a [swap](https://swap.rovergulf.net) platform) and new block validations
 
