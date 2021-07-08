@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/core/types"
+	"github.com/rovergulf/rbn/params"
 	"github.com/rovergulf/rbn/wallets"
 	"net/http"
 )
@@ -26,14 +27,18 @@ func (n *Node) serveHttp() error {
 	r.HandleFunc(endpointSync, n.SyncPeers).Methods(http.MethodGet)
 
 	r.HandleFunc("/node/info", n.nodeInfo).Methods(http.MethodGet)
-	r.HandleFunc("/chain/info", n.healthCheck).Methods(http.MethodGet)
+	r.HandleFunc("/node/info", n.searchKnownPeers).Methods(http.MethodGet)
 
+	r.HandleFunc("/chain/info", n.healthCheck).Methods(http.MethodGet)
 	r.HandleFunc("/genesis", n.ShowGenesis).Methods(http.MethodGet)
+
 	r.HandleFunc("/blocks", n.ListBlocks).Methods(http.MethodGet)
 	r.HandleFunc("/blocks/latest", n.LatestBlock).Methods(http.MethodGet)
 	r.HandleFunc("/block/{hash}", n.FindBlock).Methods(http.MethodGet)
+
 	r.HandleFunc("/balances", n.ListBalances).Methods(http.MethodGet)
 	r.HandleFunc("/balances/{addr}", n.GetBalance).Methods(http.MethodGet)
+
 	r.HandleFunc("/tx/add", n.txAdd).Methods(http.MethodPost)
 	r.HandleFunc("/tx/{hash}", n.txFind).Methods(http.MethodGet)
 
@@ -49,9 +54,11 @@ func (n *Node) nodeInfo(w http.ResponseWriter, r *http.Request) {
 	//ctx := r.Context()
 	lb, err := n.bc.GetBlock(n.bc.LastHash)
 	if err != nil {
-		if err != badger.ErrKeyNotFound {
+		if err != core.ErrBlockNotExists {
 			n.httpResponse(w, err.Error(), http.StatusInternalServerError)
 			return
+		} else {
+			err = nil
 		}
 	}
 
@@ -60,8 +67,10 @@ func (n *Node) nodeInfo(w http.ResponseWriter, r *http.Request) {
 	nLsm, nVlog := n.db.Size()     // node db size
 
 	n.httpResponse(w, map[string]interface{}{
+		"peer":        n.metadata,
 		"lash_hash":   lb.BlockHeader.Hash.Hex(),
 		"pending_txs": len(n.pendingTXs),
+		"peers":       len(n.knownPeers.peers),
 		"in_gen_race": n.inGenRace,
 		"db_size": map[string]int64{
 			"chain_lsm":    bcLsm,
@@ -72,6 +81,18 @@ func (n *Node) nodeInfo(w http.ResponseWriter, r *http.Request) {
 			"node_vlog":    nVlog,
 		},
 	})
+}
+
+func (n *Node) searchKnownPeers(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	peers, err := n.searchPeers(ctx)
+	if err != nil {
+		n.httpResponse(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	n.httpResponse(w, peers)
 }
 
 func (n *Node) ShowGenesis(w http.ResponseWriter, r *http.Request) {
@@ -132,7 +153,7 @@ func (n *Node) GetBalance(w http.ResponseWriter, r *http.Request) {
 
 func (n *Node) txAdd(w http.ResponseWriter, r *http.Request) {
 	//ctx := r.Context()
-	var req TxAddReq
+	var req TxAddRequest
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&req); err != nil {
 		n.httpResponse(w, err, http.StatusBadRequest)
@@ -153,7 +174,7 @@ func (n *Node) txAdd(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nonce := n.bc.GetNextAccountNonce(from)
-	tx, err := types.NewTransaction(from, common.HexToAddress(req.To), req.Value, nonce, req.Data)
+	tx, err := types.NewTransaction(from, common.HexToAddress(req.To), uint64(req.Value*params.Coin), nonce, req.Data)
 	if err != nil {
 		n.logger.Errorf("Unable to create new transaction: %s", err)
 		n.httpResponse(w, err, http.StatusBadRequest)

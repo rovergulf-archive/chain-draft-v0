@@ -1,25 +1,27 @@
-package node
+package client
 
 import (
 	"context"
+	"github.com/rovergulf/rbn/pkg/traceutil"
 	"github.com/rovergulf/rbn/proto"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
-type Client struct {
-	conn *grpc.ClientConn
-	lg   *zap.SugaredLogger
-	proto.NodeServiceClient
+// NetherClient represents Rovergulf BlockChain Network gRPC client interface
+type NetherClient struct {
+	conn      *grpc.ClientConn
+	rpcClient proto.NodeServiceClient
+	logger    *zap.SugaredLogger
+	tracer    *traceutil.Tracer
 }
 
-func NewClient(ctx context.Context, lg *zap.SugaredLogger, addr string) (*Client, error) {
+func NewClient(ctx context.Context, lg *zap.SugaredLogger, addr string) (*NetherClient, error) {
 	conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
 
 	c := proto.NewNodeServiceClient(conn)
 
@@ -32,15 +34,15 @@ func NewClient(ctx context.Context, lg *zap.SugaredLogger, addr string) (*Client
 		lg.Debugw("Node service health check", "status", healthCheck.Status)
 	}
 
-	return &Client{
-		conn:              conn,
-		lg:                lg,
-		NodeServiceClient: c,
+	return &NetherClient{
+		conn:      conn,
+		logger:    lg,
+		rpcClient: c,
 	}, nil
 }
 
-func (c *Client) Stop() {
+func (c *NetherClient) Stop() {
 	if err := c.conn.Close(); err != nil {
-		c.lg.Errorf("Unable to close grpc conn: %s", err)
+		c.logger.Errorf("Unable to close grpc conn: %s", err)
 	}
 }

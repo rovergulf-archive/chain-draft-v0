@@ -41,7 +41,7 @@ type Node struct {
 
 	config params.Options
 
-	bc *core.Blockchain
+	bc *core.BlockChain
 	wm *wallets.Manager
 	db *badger.DB
 
@@ -66,18 +66,9 @@ type Node struct {
 
 // New creates and returns new node if blockchain available
 func New(opts params.Options) (*Node, error) {
-	nodeAddr := viper.GetString("node.addr")
-	nodePort := viper.GetUint64("node.port")
-
-	syncMode := viper.GetString("node.sync_mode")
-	if syncMode == "" {
-		syncMode = string(SyncModeDefault)
-	}
-
-	pn := NewPeerNode(nodeAddr, nodePort, common.HexToAddress(opts.Address), SyncMode(syncMode))
+	defaultNode := defaultPeer()
 
 	n := &Node{
-		metadata: pn,
 		httpHandler: httpServer{
 			router: mux.NewRouter(),
 			logger: opts.Logger,
@@ -88,7 +79,7 @@ func New(opts params.Options) (*Node, error) {
 		logger: opts.Logger,
 		knownPeers: knownPeers{
 			peers: map[string]PeerNode{
-				pn.Account.String(): pn,
+				defaultNode.TcpAddress(): defaultNode,
 			},
 			lock: new(sync.RWMutex),
 		},
@@ -127,7 +118,7 @@ func (n *Node) Init(ctx context.Context) error {
 	}
 	n.db = db
 
-	chain, err := core.NewBlockchain(n.config)
+	chain, err := core.NewBlockChain(n.config)
 	if err != nil {
 		n.logger.Errorf("Unable to continue blockchain: %s", err)
 		return err
@@ -152,7 +143,21 @@ func (n *Node) Init(ctx context.Context) error {
 	}
 	n.logger.Debugf("Node account: %s", n.account.Address())
 
+	n.setNetworkMetadata(ctx)
+
 	return nil
+}
+
+// temporally method i think // TBD set default
+func (n *Node) setNetworkMetadata(ctx context.Context) {
+	nodeAddr := viper.GetString("node.addr")
+	nodePort := viper.GetUint64("node.port")
+	syncMode := viper.GetString("node.sync_mode")
+	if syncMode == "" {
+		syncMode = string(SyncModeDefault)
+	}
+
+	n.metadata = NewPeerNode(nodeAddr, nodePort, n.account.Address(), SyncMode(syncMode))
 }
 
 func (n *Node) Run(ctx context.Context) error {
@@ -267,7 +272,11 @@ func (n *Node) race(ctx context.Context) {
 					n.inGenRace = false
 				}
 			}()
-
+		case tx := <-n.newSyncTXs:
+			n.logger.Debugw("New pending tx appeared", "is_racing", n.inGenRace)
+			if _, err := n.AddPendingTX(tx, n.metadata); err != nil {
+				n.logger.Errorf("Unable to add pending tx: %s", err)
+			}
 		case block, _ := <-n.newSyncBlocks:
 			n.logger.Debugw("Proposed block appeared", "is_racing", n.inGenRace)
 			if n.inGenRace {

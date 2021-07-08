@@ -69,7 +69,6 @@ func (h *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Println("h.tracer", h.tracer != nil)
 	if h.tracer != nil {
 		span := h.tracer.StartSpan(strings.TrimPrefix(r.URL.Path, "/"))
 		span.SetTag("host", r.Host)

@@ -7,11 +7,7 @@ import (
 	"github.com/rovergulf/rbn/core/types"
 )
 
-var (
-	balancesPrefix = []byte("balances/")
-)
-
-func (bc *Blockchain) GetBalance(addr common.Address) (*types.Balance, error) {
+func (bc *BlockChain) GetBalance(addr common.Address) (*types.Balance, error) {
 	var balance types.Balance
 
 	key := append(balancesPrefix, addr.Bytes()...)
@@ -31,7 +27,7 @@ func (bc *Blockchain) GetBalance(addr common.Address) (*types.Balance, error) {
 	return &balance, nil
 }
 
-func (bc *Blockchain) ListBalances() ([]*types.Balance, error) {
+func (bc *BlockChain) ListBalances() ([]*types.Balance, error) {
 	var balances []*types.Balance
 
 	if err := bc.db.View(func(txn *badger.Txn) error {
@@ -60,7 +56,7 @@ func (bc *Blockchain) ListBalances() ([]*types.Balance, error) {
 	return balances, nil
 }
 
-func (bc *Blockchain) GetNextAccountNonce(addr common.Address) uint64 {
+func (bc *BlockChain) GetNextAccountNonce(addr common.Address) uint64 {
 	b, err := bc.GetBalance(addr)
 	if err != nil {
 		if err != badger.ErrKeyNotFound {
@@ -72,7 +68,7 @@ func (bc *Blockchain) GetNextAccountNonce(addr common.Address) uint64 {
 	return b.Nonce + 1
 }
 
-func (bc *Blockchain) NewBalance(addr common.Address, value uint64) (*types.Balance, error) {
+func (bc *BlockChain) NewBalance(addr common.Address, value uint64) (*types.Balance, error) {
 	balance := &types.Balance{
 		Address: addr,
 		Balance: value,

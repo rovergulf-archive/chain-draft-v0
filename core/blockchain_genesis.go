@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-func (bc *Blockchain) NewGenesisBlockWithRewrite(ctx context.Context) error {
+func (bc *BlockChain) NewGenesisBlockWithRewrite(ctx context.Context) error {
 	gen := genesisByNetworkId(viper.GetString("network.id"))
 
 	genesisBlock, err := gen.ToBlock()
@@ -30,6 +30,10 @@ func (bc *Blockchain) NewGenesisBlockWithRewrite(ctx context.Context) error {
 
 	return bc.db.Update(func(txn *badger.Txn) error {
 		if err := txn.Set([]byte("g"), genSerialized); err != nil {
+			bc.logger.Errorf("Unable to save genesis value: %s", err)
+			return err
+		}
+		if err := txn.Set([]byte("gen_block"), serializedBLock); err != nil {
 			bc.logger.Errorf("Unable to save genesis value: %s", err)
 			return err
 		}
@@ -71,11 +75,10 @@ func (bc *Blockchain) NewGenesisBlockWithRewrite(ctx context.Context) error {
 	})
 }
 
-func (bc *Blockchain) loadGenesis(ctx context.Context) error {
+func (bc *BlockChain) loadGenesis(ctx context.Context) error {
 	return bc.db.View(func(txn *badger.Txn) error {
-		lh, err := txn.Get([]byte("g"))
+		gen, err := txn.Get([]byte("g"))
 		if err != nil {
-			// is it ok??
 			if err == badger.ErrKeyNotFound {
 				return ErrGenesisNotExists
 			}
@@ -83,14 +86,15 @@ func (bc *Blockchain) loadGenesis(ctx context.Context) error {
 			return err
 		}
 
-		return lh.Value(func(val []byte) error {
+		return gen.Value(func(val []byte) error {
 			return bc.genesis.Deserialize(val)
 		})
 	})
 }
 
-func (bc *Blockchain) GetGenesis(ctx context.Context) (*Genesis, error) {
+func (bc *BlockChain) GetGenesis(ctx context.Context) (*Genesis, error) {
 	if bc.genesis == nil {
+		bc.genesis = new(Genesis)
 		if err := bc.loadGenesis(ctx); err != nil {
 			return nil, err
 		}

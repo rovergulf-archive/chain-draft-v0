@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/rovergulf/rbn/client"
 	"github.com/spf13/viper"
 	"sync"
 )
@@ -17,6 +17,25 @@ var (
 type knownPeers struct {
 	peers map[string]PeerNode
 	lock  *sync.RWMutex
+}
+
+func (k knownPeers) GetPeer(addr string) (PeerNode, bool) {
+	k.lock.RLock()
+	peer, ok := k.peers[addr]
+	k.lock.RUnlock()
+	return peer, ok
+}
+
+func (k knownPeers) AddPeer(addr string, peer PeerNode) {
+	k.lock.Lock()
+	k.peers[addr] = peer
+	k.lock.Unlock()
+}
+
+func (k knownPeers) DeletePeer(addr string) {
+	k.lock.Lock()
+	delete(k.peers, addr)
+	k.lock.Unlock()
 }
 
 type SyncMode string
@@ -42,7 +61,7 @@ type PeerNode struct {
 
 	// Whenever my node already established connection, sync with this Peer
 	connected bool
-	client    *Client
+	client    *client.NetherClient
 }
 
 func NewPeerNode(ip string, port uint64, address common.Address, mode SyncMode) PeerNode {
@@ -83,44 +102,6 @@ func (pn *PeerNode) HttpApiAddress() string {
 	return fmt.Sprintf("%s://%s", pn.ApiProtocol(), pn.ApiAddress())
 }
 
-// addPeer saves new peer to node storage
-func (n *Node) addPeer(peer PeerNode) error {
-	n.logger.Info("n.addPeer", peer)
-
-	pn, err := peer.Serialize()
-	if err != nil {
-		return err
-	}
-
-	n.knownPeers.lock.Lock()
-	defer n.knownPeers.lock.Unlock()
-	return n.db.Update(func(txn *badger.Txn) error {
-		key := append(peerPrefix, peer.Account.Bytes()...)
-		if err := txn.Set(key, pn); err != nil {
-			return err
-		} else {
-			n.knownPeers.peers[peer.Account.String()] = peer
-		}
-		return nil
-	})
-}
-
-// removePeer deletes peer from node storage
-func (n *Node) removePeer(peer PeerNode) error {
-	n.knownPeers.lock.Lock()
-	defer n.knownPeers.lock.Unlock()
-	return n.db.Update(func(txn *badger.Txn) error {
-		key := append(peerPrefix, peer.Account.Bytes()...)
-		if err := txn.Delete(key); err != nil {
-			return err
-		} else {
-			delete(n.knownPeers.peers, peer.Account.String())
-		}
-
-		return nil
-	})
-}
-
 func (pn *PeerNode) Serialize() ([]byte, error) {
 	var buff bytes.Buffer
 
@@ -146,4 +127,14 @@ func collectPeerUrls(nodes map[string]PeerNode) []string {
 	}
 
 	return peers
+}
+
+func defaultPeer() PeerNode {
+	return PeerNode{
+		Ip:        "127.0.0.1",
+		Port:      9420,
+		Root:      true,
+		Account:   common.HexToAddress("0x3c0b3b41a1e027d3E759612Af08844f1cca0DdE3"),
+		connected: false,
+	}
 }

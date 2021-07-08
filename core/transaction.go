@@ -7,12 +7,9 @@ import (
 	"github.com/rovergulf/rbn/core/types"
 )
 
-var (
-	txPrefix       = []byte("tx/")
-	txPrefixLength = len(txPrefix)
-)
+var ()
 
-func (bc *Blockchain) ListTransactions() ([]types.SignedTx, error) {
+func (bc *BlockChain) ListTransactions() ([]types.SignedTx, error) {
 	var txs []types.SignedTx
 
 	if err := bc.db.View(func(txn *badger.Txn) error {
@@ -41,7 +38,7 @@ func (bc *Blockchain) ListTransactions() ([]types.SignedTx, error) {
 	return txs, nil
 }
 
-func (bc *Blockchain) FindTransaction(txId []byte) (*types.SignedTx, error) {
+func (bc *BlockChain) FindTransaction(txId []byte) (*types.SignedTx, error) {
 	var tx types.SignedTx
 
 	if err := bc.db.View(func(txn *badger.Txn) error {
@@ -61,7 +58,7 @@ func (bc *Blockchain) FindTransaction(txId []byte) (*types.SignedTx, error) {
 	return &tx, nil
 }
 
-func (bc *Blockchain) SaveTx(txHash common.Hash, tx types.SignedTx) error {
+func (bc *BlockChain) SaveTx(txHash common.Hash, tx types.SignedTx) error {
 	encodedTx, err := tx.Serialize()
 	if err != nil {
 		return err
@@ -73,7 +70,7 @@ func (bc *Blockchain) SaveTx(txHash common.Hash, tx types.SignedTx) error {
 	})
 }
 
-func (bc *Blockchain) ApplyTx(txHash common.Hash, tx types.SignedTx) (*types.Receipt, error) {
+func (bc *BlockChain) ApplyTx(txHash common.Hash, tx types.SignedTx) (*types.Receipt, error) {
 	fromAddr, err := bc.GetBalance(tx.From)
 	if err != nil {
 		bc.logger.Errorf("Unable to get sender balance: %s", err)
@@ -95,6 +92,7 @@ func (bc *Blockchain) ApplyTx(txHash common.Hash, tx types.SignedTx) (*types.Rec
 	toAddr.Balance += tx.Value
 
 	fromAddr.Nonce = tx.Nonce
+	toAddr.Nonce++
 
 	from, err := fromAddr.Serialize()
 	if err != nil {

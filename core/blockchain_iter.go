@@ -8,17 +8,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// BlockchainIterator is used to iterate over blockchain blocks
-type BlockchainIterator struct {
+// BlockChainIterator is used to iterate over blockchain blocks
+type BlockChainIterator struct {
 	CurrentHash common.Hash
 	db          *badger.DB
 	logger      *zap.SugaredLogger
 	tracer      opentracing.Tracer
 }
 
-// Iterator returns a BlockchainIterator
-func (bc *Blockchain) Iterator() *BlockchainIterator {
-	bci := &BlockchainIterator{
+// Iterator returns a BlockChainIterator
+func (bc *BlockChain) Iterator() *BlockChainIterator {
+	bci := &BlockChainIterator{
 		CurrentHash: bc.LastHash,
 		db:          bc.db,
 		logger:      bc.logger,
@@ -29,7 +29,7 @@ func (bc *Blockchain) Iterator() *BlockchainIterator {
 }
 
 // Next returns next block starting from the tip
-func (i *BlockchainIterator) Next() (*types.Block, error) {
+func (i *BlockChainIterator) Next() (*types.Block, error) {
 	var block *types.Block
 
 	if err := i.db.View(func(txn *badger.Txn) error {

@@ -20,7 +20,7 @@ import (
 var (
 	cfgFile, dataDir string
 	logger           *zap.SugaredLogger
-	blockChain       *core.Blockchain
+	blockChain       *core.BlockChain
 	accountManager   *wallets.Manager
 	localNode        *node.Node
 )
@@ -28,10 +28,10 @@ var (
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:     "rbn",
-	Short:   "Rovergulf Blockchain CLI",
-	Long:    `Rovergulf Blockchain Network SDK`,
+	Short:   "Rovergulf BlockChain CLI",
+	Long:    `Rovergulf BlockChain Network SDK`,
 	Version: "0.0.1-dev",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	PreRunE: func(cmd *cobra.Command, args []string) error {
 		ver, _ := cmd.Flags().GetBool("version")
 		if ver {
 			return writeOutput(cmd, cmd.Version)
@@ -39,6 +39,7 @@ var rootCmd = &cobra.Command{
 			return cmd.Usage()
 		}
 	},
+	SilenceUsage: true,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -63,7 +64,7 @@ func init() {
 	rootCmd.PersistentFlags().Bool("dev", false, "Enable development/testing environment")
 
 	// main flags
-	rootCmd.PersistentFlags().StringVar(&dataDir, "data_dir", os.Getenv("DATA_DIR"), "Blockchain data directory")
+	rootCmd.PersistentFlags().StringVar(&dataDir, "data_dir", os.Getenv("DATA_DIR"), "BlockChain data directory")
 	rootCmd.PersistentFlags().StringVar(&dataDir, "network_id", params.MainNetworkId, "Chain network id")
 
 	// bind viper values
@@ -76,6 +77,25 @@ func init() {
 
 	// show version
 	rootCmd.Flags().BoolP("version", "v", false, "Display version")
+
+	// other commands
+
+	// balances
+	rootCmd.AddCommand(balancesCmd)
+	balancesCmd.AddCommand(balancesListCmd())
+	balancesCmd.AddCommand(balancesGetCmd())
+
+	// chain
+	rootCmd.AddCommand(blockchainCmd())
+
+	// node
+	rootCmd.AddCommand(nodeCmd())
+
+	// tx
+	rootCmd.AddCommand(txCmd())
+
+	// wallets
+	rootCmd.AddCommand(walletsCmd())
 
 	initZapLogger()
 }
@@ -147,7 +167,7 @@ func setConfigDefaults() {
 	viper.SetDefault("node.addr", "127.0.0.1")
 	viper.SetDefault("node.port", 9420)
 	viper.SetDefault("node.sync_mode", node.SyncModeDefault)
-	viper.SetDefault("node.sync_interval", 5)
+	viper.SetDefault("node.sync_interval", 15)
 	viper.SetDefault("node.cache_dir", "")
 
 	viper.SetDefault("http.disabled", false)

@@ -29,15 +29,15 @@ func DevNetGenesis() *Genesis {
 		NetherPrice: 21000,
 		Nonce:       0,
 		Coinbase:    common.Address{},
-		Symbol:      "Nether",
-		Units:       "Wei", // in favor of Etherium native denomination
+		Symbol:      "Nether", // is an acronym for Network, Etherium and Rovergulf
+		Units:       "Wei",    // in favor of Etherium native denomination
 		ParentHash:  common.Hash{},
 		Alloc:       developerNetAlloc(),
 		ExtraData:   []byte{},
 	}
 }
 
-// DefaultMainNetGenesis returns default Genesis for main Rovergulf Blockchain Network
+// DefaultMainNetGenesis returns default Genesis for main Rovergulf BlockChain Network
 func DefaultMainNetGenesis() *Genesis {
 	return &Genesis{
 		ChainId:     params.MainNetworkId,
@@ -45,7 +45,7 @@ func DefaultMainNetGenesis() *Genesis {
 		NetherPrice: 21000,
 		Nonce:       0,
 		Coinbase:    common.HexToAddress("0x3c0b3b41a1e027d3E759612Af08844f1cca0DdE3"),
-		Symbol:      "RNT",    // abbreviation for Rovergulf Native Token
+		Symbol:      "Coin",   // Rovergulf Coin
 		Units:       "Nether", // is like it powered by atoms or quantum
 		Alloc:       defaultMainNetAlloc(),
 		ExtraData:   []byte{},

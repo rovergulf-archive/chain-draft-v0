@@ -15,9 +15,6 @@ var balancesCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(balancesCmd)
-	balancesCmd.AddCommand(balancesListCmd())
-	balancesCmd.AddCommand(balancesGetCmd())
 }
 
 // balancesListCmd represents the balances list command
@@ -25,7 +22,7 @@ func balancesListCmd() *cobra.Command {
 	var balancesListCmd = &cobra.Command{
 		Use:     "list",
 		Short:   "Lists all balances.",
-		PreRunE: prepareBlockchain,
+		PreRunE: prepareBlockChain,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			defer blockChain.Shutdown()
 
@@ -48,7 +45,7 @@ func balancesGetCmd() *cobra.Command {
 	var balancesGetCmd = &cobra.Command{
 		Use:     "get",
 		Short:   "Get blockchain address balance.",
-		PreRunE: prepareBlockchain,
+		PreRunE: prepareBlockChain,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			address, _ := cmd.Flags().GetString("address")
 			if len(address) > 0 {

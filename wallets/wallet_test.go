@@ -21,7 +21,7 @@ func TestSign(t *testing.T) {
 
 	account := common.BytesToAddress(pubKeyBytesHash[12:])
 
-	msg := []byte("RNT sign function test: 0")
+	msg := []byte("Coin sign function test: 0")
 
 	sig, err := Sign(msg, privKey)
 	if err != nil {

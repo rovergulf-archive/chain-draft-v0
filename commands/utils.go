@@ -31,8 +31,8 @@ func getNodeDbFilePath() string {
 	return path.Join(viper.GetString("data_dir"), node.DbFileName)
 }
 
-func prepareBlockchain(cmd *cobra.Command, args []string) error {
-	bc, err := core.NewBlockchain(getBlockchainConfig(cmd))
+func prepareBlockChain(cmd *cobra.Command, args []string) error {
+	bc, err := core.NewBlockChain(getBlockChainConfig(cmd))
 	if err != nil {
 		return err
 	} else {
@@ -43,7 +43,7 @@ func prepareBlockchain(cmd *cobra.Command, args []string) error {
 }
 
 func prepareWalletsManager(cmd *cobra.Command, args []string) error {
-	wm, err := wallets.NewManager(getBlockchainConfig(cmd))
+	wm, err := wallets.NewManager(getBlockChainConfig(cmd))
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func prepareWalletsManager(cmd *cobra.Command, args []string) error {
 }
 
 func prepareNode(cmd *cobra.Command, args []string) error {
-	n, err := node.New(getBlockchainConfig(cmd))
+	n, err := node.New(getBlockChainConfig(cmd))
 	if err != nil {
 		return err
 	}
@@ -66,7 +66,7 @@ func prepareNode(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func getBlockchainConfig(cmd *cobra.Command) params.Options {
+func getBlockChainConfig(cmd *cobra.Command) params.Options {
 	opts := params.Options{
 		Logger: logger,
 	}

@@ -4,19 +4,22 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/opentracing/opentracing-go"
 	"github.com/rovergulf/rbn/proto"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func (n *Node) handleRpcAddPeer(ctx context.Context, data []byte) (*proto.CallResponse, error) {
-	var pn PeerNode
+	var req JoinPeerRequest
 
-	if err := pn.Deserialize(data); err != nil {
+	if err := json.Unmarshal(data, &req); err != nil {
 		return nil, err
 	}
-	fmt.Println("peer node arrived", pn)
+	pn := req.From
 
 	if n.tracer != nil {
 		var opts []opentracing.StartSpanOption
@@ -30,9 +33,15 @@ func (n *Node) handleRpcAddPeer(ctx context.Context, data []byte) (*proto.CallRe
 		ctx = opentracing.ContextWithSpan(ctx, span)
 	}
 
-	if err := n.addPeer(pn); err != nil {
+	if _, ok := n.knownPeers.GetPeer(pn.TcpAddress()); ok {
+		return nil, status.Errorf(codes.AlreadyExists, "Peer already known")
+	}
+
+	if err := n.addDbPeer(pn); err != nil {
 		return nil, err
 	}
+
+	n.knownPeers.AddPeer(pn.TcpAddress(), pn)
 
 	return &proto.CallResponse{
 		Status: 0, // codes.OK
@@ -77,7 +86,7 @@ func (n *Node) handleRpcAddTx(ctx context.Context, data []byte) (*proto.CallResp
 		return nil, fmt.Errorf("empty data")
 	}
 
-	var req TxAddReq
+	var req TxAddRequest
 	decoder := gob.NewDecoder(bytes.NewReader(data))
 	if err := decoder.Decode(&req); err != nil {
 		return nil, err

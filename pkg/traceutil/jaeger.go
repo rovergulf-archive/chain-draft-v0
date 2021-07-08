@@ -38,7 +38,6 @@ func (t *jaegerTracer) CollectorUrl() string {
 
 func NewTracerFromViperConfig() (Tracer, error) {
 	jaegerAddr := viper.GetString(JaegerTraceConfigKey)
-	fmt.Println("jaegerAddr", jaegerAddr, len(jaegerAddr) > 0)
 	if len(jaegerAddr) > 0 {
 		return NewTracer(jaegerAddr)
 	} else {

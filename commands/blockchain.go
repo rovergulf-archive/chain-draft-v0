@@ -5,20 +5,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	rootCmd.AddCommand(blockchainCmd())
-}
-
 // blockchainCmd represents the run command
 func blockchainCmd() *cobra.Command {
 	var blockchainCmd = &cobra.Command{
 		Use:          "blockchain",
-		Short:        "Blockchain operations",
+		Short:        "BlockChain operations",
 		Long:         ``,
 		SilenceUsage: true,
 	}
 
-	blockchainCmd.AddCommand(initBlockchainCmd())
+	blockchainCmd.AddCommand(initBlockChainCmd())
 	blockchainCmd.AddCommand(blockchainListCmd())
 	blockchainCmd.AddCommand(blockchainLastBlockCmd())
 	blockchainCmd.AddCommand(blockchainGenesisCmd())
@@ -26,13 +22,13 @@ func blockchainCmd() *cobra.Command {
 	return blockchainCmd
 }
 
-// initBlockchainCmd represents the run command
-func initBlockchainCmd() *cobra.Command {
-	var initBlockchainCmd = &cobra.Command{
+// initBlockChainCmd represents the run command
+func initBlockChainCmd() *cobra.Command {
+	var initBlockChainCmd = &cobra.Command{
 		Use:     "init",
 		Short:   "Start chain genesis block",
 		Long:    ``,
-		PreRunE: prepareBlockchain,
+		PreRunE: prepareBlockChain,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -42,18 +38,16 @@ func initBlockchainCmd() *cobra.Command {
 				return err
 			}
 
-			logger.Infow("Blockchain initialized.", "tip", blockChain.LastHash)
+			logger.Infow("BlockChain initialized.", "tip", blockChain.LastHash)
 
 			return nil
 		},
 		TraverseChildren: true,
 	}
 
-	initBlockchainCmd.Flags().StringP("genesis", "g", "", "Genesis file path")
-	initBlockchainCmd.MarkFlagRequired("genesis")
-	bindViperFlag(initBlockchainCmd, "genesis", "genesis")
+	addNetworkIdFlag(initBlockChainCmd)
 
-	return initBlockchainCmd
+	return initBlockChainCmd
 }
 
 // blockchainListCmd represents the blocks list command
@@ -61,7 +55,7 @@ func blockchainListCmd() *cobra.Command {
 	var blockchainListCmd = &cobra.Command{
 		Use:     "list",
 		Short:   "Lists all blocks.",
-		PreRunE: prepareBlockchain,
+		PreRunE: prepareBlockChain,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			defer blockChain.Shutdown()
 			maxLimit, _ := cmd.Flags().GetInt("limit")
@@ -109,7 +103,7 @@ func blockchainLastBlockCmd() *cobra.Command {
 	var blockchainLastBlockCmd = &cobra.Command{
 		Use:     "last-block",
 		Short:   "Show last block in the chain",
-		PreRunE: prepareBlockchain,
+		PreRunE: prepareBlockChain,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			defer blockChain.Shutdown()
 
@@ -133,7 +127,7 @@ func blockchainGenesisCmd() *cobra.Command {
 		Use:     "show-genesis",
 		Aliases: []string{"get-gen", "genesis"},
 		Short:   "Show chain genesis",
-		PreRunE: prepareBlockchain,
+		PreRunE: prepareBlockChain,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

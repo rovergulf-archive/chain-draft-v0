@@ -1,13 +1,8 @@
 package badgerdb
 
 import (
-	"context"
 	"fmt"
 	"github.com/dgraph-io/badger/v3"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/opentracing/opentracing-go"
-	"github.com/rovergulf/rbn/database"
-	"go.uber.org/zap"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,47 +34,4 @@ func OpenDB(dir string, opts badger.Options) (*badger.DB, error) {
 	} else {
 		return db, nil
 	}
-}
-
-var (
-	emptyHash = common.HexToHash("")
-)
-
-type badgerDb struct {
-	db     *badger.DB
-	logger *zap.SugaredLogger
-	tracer opentracing.Tracer
-}
-
-type chainDb struct {
-	badgerDb
-}
-
-type keystoreDb struct {
-	badgerDb
-}
-
-type nodeDb struct {
-	badgerDb
-}
-
-func NewChainDatabase(ctx context.Context, dataDir string) (database.ChainBackend, error) {
-	db, err := OpenDB(dataDir, badger.DefaultOptions(dataDir))
-	if err != nil {
-		return nil, err
-	}
-
-	backend := chainDb{
-		badgerDb: badgerDb{db: db},
-	}
-
-	return &backend, nil
-}
-
-func NewKeystoreDatabase(ctx context.Context, dataDir string) (database.KeystoreBackend, error) {
-	return nil, nil
-}
-
-func NewNodeDatabase(ctx context.Context, dataDir string) (database.NodeBackend, error) {
-	return nil, nil
 }

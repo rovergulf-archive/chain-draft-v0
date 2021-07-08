@@ -45,7 +45,7 @@ func NewBlock(header BlockHeader, txs []SignedTx) *Block {
 	}
 }
 
-// Block represents Blockchain state change interface
+// Block represents BlockChain state change interface
 type Block struct {
 	BlockHeader
 	Transactions []SignedTx `json:"transactions" yaml:"transactions"`

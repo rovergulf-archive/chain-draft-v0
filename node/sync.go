@@ -2,8 +2,12 @@ package node
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/rovergulf/rbn/client"
 	"github.com/spf13/viper"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"time"
 )
 
@@ -26,51 +30,104 @@ func (n *Node) sync(ctx context.Context) {
 func (n *Node) doSync(ctx context.Context) {
 	for _, peer := range n.knownPeers.peers {
 		if n.metadata.Ip == peer.Ip && n.metadata.Port == peer.Port {
+			n.logger.Debug("Removing itself from known peers mem cache")
+			n.knownPeers.DeletePeer(peer.TcpAddress())
 			continue
 		}
 
 		if peer.Ip == "" {
+			n.logger.Debug("Removing node with no IP Address from known peers mem cache")
+			n.knownPeers.DeletePeer(peer.TcpAddress())
 			continue
 		}
 
 		n.logger.Infof("Searching for new Peers and their Blocks and Peers: '%s'", peer.TcpAddress())
 
-		if err := n.joinKnownPeer(peer); err != nil {
+		n.logger.Debug("Join known peers...")
+		if err := n.joinKnownPeer(ctx, peer); err != nil {
 			n.logger.Error("Unable to join known peer: ", err)
 			continue
 		}
 
-		if err := n.syncBlocks(); err != nil {
+		n.logger.Debug("Sync state version...")
+		if err := n.syncVersion(ctx); err != nil {
+			n.logger.Error("Unable to sync version: ", err)
+			continue
+		}
+
+		n.logger.Debug("Validate genesis...")
+		if err := n.validateGenesis(ctx); err != nil {
+			n.logger.Error("Unable to validate genesis: ", err)
+			continue
+		}
+
+		n.logger.Debug("Sync blocks...")
+		if err := n.syncBlocks(ctx); err != nil {
 			n.logger.Error("Unable to sync blocks: ", err)
 			continue
 		}
 
-		if err := n.syncKnownPeers(); err != nil {
-			n.logger.Error("Unable to sync knonw peers", err)
-			continue
-		}
-
-		if err := n.syncPendingTXs(); err != nil {
+		n.logger.Debug("Sync pending transactions...")
+		if err := n.syncPendingTXs(ctx); err != nil {
 			n.logger.Error(err)
 			continue
 		}
 	}
 }
 
-func (n *Node) validateGenesis() error {
+func (n *Node) validateGenesis(ctx context.Context) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (n *Node) joinKnownPeer(peer PeerNode) error {
-	return fmt.Errorf("not implemented")
+func (n *Node) joinKnownPeer(ctx context.Context, peer PeerNode) error {
+	if !peer.connected {
+		// TODO client.NewClient
+		c, err := client.NewClient(ctx, n.logger, peer.TcpAddress())
+		if err != nil {
+			n.logger.Errorf("Unable to run peer client: %s", err)
+			return err
+		}
+
+		peer.connected = true
+		peer.client = c
+		n.knownPeers.AddPeer(peer.TcpAddress(), peer)
+
+		n.logger.Debugf("'%s' peer is healthy!", peer.TcpAddress())
+	}
+
+	if n.IsKnownPeer(peer) {
+		n.logger.Debugw("Peer already known",
+			"account", peer.Account, "addr", peer.TcpAddress())
+		return nil
+	}
+
+	data, err := json.Marshal(JoinPeerRequest{From: n.metadata})
+	if err != nil {
+		return err
+	}
+
+	if _, err := peer.client.JoinKnownPeer(ctx, data); err != nil {
+		st, ok := status.FromError(err)
+		if ok {
+			if st.Code() == codes.AlreadyExists {
+				n.logger.Debugw("Peer already known",
+					"account", peer.Account, "addr", peer.TcpAddress())
+				return nil
+			}
+		}
+		n.logger.Errorf("Failed to join peer: %s", err)
+		return err
+	}
+
+	return nil
 }
 
-func (n *Node) syncKnownPeers() error {
+func (n *Node) syncKnownPeers(ctx context.Context) error {
 	for _, statusPeer := range n.knownPeers.peers {
 		if !n.IsKnownPeer(statusPeer) {
 			n.logger.Infof("Found new Peer %s", statusPeer.TcpAddress())
 
-			if err := n.addPeer(statusPeer); err != nil {
+			if err := n.addDbPeer(statusPeer); err != nil {
 				return err
 			}
 		}
@@ -79,14 +136,22 @@ func (n *Node) syncKnownPeers() error {
 	return nil
 }
 
-func (n *Node) syncBlocks() error {
+func (n *Node) syncVersion(ctx context.Context) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (n *Node) syncPendingTXs() error {
+func (n *Node) syncBlocks(ctx context.Context) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (n *Node) syncAccounts(peer PeerNode) error {
+func (n *Node) syncPendingTXs(ctx context.Context) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (n *Node) syncAccountBalances(ctx context.Context, peer PeerNode) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (n *Node) syncKeystore(ctx context.Context, peer PeerNode) error {
 	return fmt.Errorf("not implemented")
 }

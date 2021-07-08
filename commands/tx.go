@@ -6,15 +6,11 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/console/prompt"
+	"github.com/rovergulf/rbn/client"
 	"github.com/rovergulf/rbn/node"
-	"github.com/rovergulf/rbn/proto"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
-
-func init() {
-	rootCmd.AddCommand(txCmd())
-}
 
 func txCmd() *cobra.Command {
 	var txCmd = &cobra.Command{
@@ -37,7 +33,7 @@ func txGetCmd() *cobra.Command {
 		Use:     "get",
 		Short:   "Describe transaction by id",
 		Long:    ``,
-		PreRunE: prepareBlockchain,
+		PreRunE: prepareBlockChain,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			defer blockChain.Shutdown()
 			id, err := cmd.Flags().GetString("id")
@@ -82,7 +78,7 @@ func txSendCmd() *cobra.Command {
 			//dataFormat, _ := cmd.Flags().GetString("data-format")
 			from, _ := cmd.Flags().GetString("address")
 			to, _ := cmd.Flags().GetString("to")
-			amount, _ := cmd.Flags().GetUint64("amount")
+			amount, _ := cmd.Flags().GetFloat64("amount")
 
 			if !common.IsHexAddress(to) {
 				return fmt.Errorf("recipient address is not Valid")
@@ -101,13 +97,13 @@ func txSendCmd() *cobra.Command {
 				return err
 			}
 
-			client, err := node.NewClient(ctx, logger, viper.GetString("network.addr"))
+			c, err := client.NewClient(ctx, logger, viper.GetString("network.addr"))
 			if err != nil {
 				return err
 			}
-			defer client.Stop()
+			defer c.Stop()
 
-			addTxReq := node.TxAddReq{
+			addTxReq := node.TxAddRequest{
 				From:    from,
 				FromPwd: auth,
 				To:      to,
@@ -120,10 +116,7 @@ func txSendCmd() *cobra.Command {
 				return err
 			}
 
-			res, err := client.RpcCall(ctx, &proto.CallRequest{
-				Cmd:  proto.CallRequest_TX_ADD,
-				Data: callData,
-			})
+			res, err := c.TxAdd(ctx, callData)
 			if err != nil {
 				return err
 			}

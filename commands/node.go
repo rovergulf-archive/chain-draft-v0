@@ -12,10 +12,6 @@ import (
 	"strconv"
 )
 
-func init() {
-	rootCmd.AddCommand(nodeCmd())
-}
-
 // nodeCmd represents the node command
 func nodeCmd() *cobra.Command {
 	var nodeCmd = &cobra.Command{
@@ -37,12 +33,12 @@ func nodeCmd() *cobra.Command {
 func nodeRunCmd() *cobra.Command {
 	var nodeRunCmd = &cobra.Command{
 		Use:   "run",
-		Short: "Run Rovergulf Blockchain Network peer node",
+		Short: "Run Rovergulf BlockChain Network peer node",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			n, err := node.New(getBlockchainConfig(cmd))
+			n, err := node.New(getBlockChainConfig(cmd))
 			if err != nil {
 				return err
 			}
@@ -120,6 +116,7 @@ func nodeAccountDumpCmd() *cobra.Command {
 		Short: "Export node account key",
 		Long: `Exports node default account CryptJSON to specified file 
 and prints out mnemonic passphrase to unlock it`,
+		PreRunE: prepareNode,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			//ctx, cancel := context.WithCancel(context.Background())
 			//defer cancel()
@@ -159,6 +156,7 @@ func nodeAccountImportCmd() *cobra.Command {
 		Short: "Import node account key",
 		Long: `Imports node account key from specified CryptoJSON file
 and sets it as node default`,
+		PreRunE: prepareNode,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			//ctx, cancel := context.WithCancel(context.Background())
 			//defer cancel()

@@ -12,10 +12,6 @@ import (
 	"path"
 )
 
-func init() {
-	rootCmd.AddCommand(walletsCmd())
-}
-
 // walletsCmd represents the wallet command
 func walletsCmd() *cobra.Command {
 	var walletsCmd = &cobra.Command{
@@ -41,7 +37,7 @@ func walletsListCmd() *cobra.Command {
 		Short:   "Lists available wallet addresses.",
 		PreRunE: prepareWalletsManager,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			opts := getBlockchainConfig(cmd)
+			opts := getBlockChainConfig(cmd)
 			defer accountManager.Shutdown()
 
 			addresses, err := accountManager.GetAllAddresses()

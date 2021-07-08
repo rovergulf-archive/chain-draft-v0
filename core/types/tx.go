@@ -22,7 +22,7 @@ func NewTransaction(from, to common.Address, amount uint64, nonce uint64, data [
 		return Transaction{}, fmt.Errorf("transaction cannot be sent to yourself")
 	}
 
-	percentile := params.RNT / (params.TxPrice * params.NetherPrice)
+	percentile := params.Coin / (params.TxPrice * params.NetherPrice)
 	nether := amount / percentile
 	if nether < params.NetherLimit {
 		nether = params.NetherLimit

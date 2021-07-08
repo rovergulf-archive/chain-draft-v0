@@ -31,7 +31,9 @@ message CallRequest {
     SYNC_BLOCKS = 4;
     TX_ADD = 7;
     TX_GET = 8;
-    BALANCE_GET = 9;
+    BALANCE_ADD = 9;
+    BALANCE_GET = 10;
+    BALANCE_DROP = 11;
   }
   Command cmd = 1;
   bytes data = 2;

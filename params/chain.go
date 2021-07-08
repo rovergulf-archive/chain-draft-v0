@@ -8,8 +8,8 @@ const (
 const (
 	GenesisNetherLimit uint64 = 42e5 // Genesis block nether limit
 
-	NetherLimit uint64 = 4800 // Minimal nether limit may ever be.
-	NetherPrice uint64 = 200  // Price per RNT
+	NetherLimit uint64 = 48e3 // Minimal nether fee limit may ever be.
+	NetherPrice uint64 = 200  // Nether fee price multiplier per Coin
 )
 
 // tx fees
@@ -21,5 +21,6 @@ const (
 )
 
 const (
-	TxReward uint64 = 0 // Reward fee per block transaction handled
+	TxReward       uint64 = 64 // Reward multiplier per block transaction handled
+	HardwareReward uint64 = 32 // Reward multiplier for network membership
 )

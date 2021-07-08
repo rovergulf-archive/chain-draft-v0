@@ -4,18 +4,52 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
-## 5 Jul 2021
+## 7 Jul 2021
 
 ### Added
-- Transaction fee calculation
-- Use receipts as transaction applied return result
+- sync known peers (to be tested)
 
 ### Changed
-- Block and Balance structs moved to `core/types` package
 
 ### Fixed
 
 ### Removed
+
+
+## 7 Jul 2021
+
+### Added
+- Added [Contributing guide](CONTRIBUTING.md)
+- I have lost a lot of time at trying to implement common database interface,
+  only after lot of spent time I get that it is not even good fits the idea
+  of separate interfaces and storages. It would be described in further docs:
+  this chain would be as disturbed, as you do not need to have the whole chain backup. 
+  Only the data compared with your node and accounts registered at network.
+
+
+## 6 Jul 2021
+
+### Added
+- Use receipts as transaction applied return result
+
+### Changed
+- node blockchain state run does not load genesis now
+- peer removes itself from mem cache discovery
+- gRPC client moved to separate `client` package – probably would be renamed and/or moved
+- Denomination for RNT renamed to Coin and would be used as Rovergulf Coins
+
+### Fixed
+
+### Removed
+
+
+## 5 Jul 2021
+
+### Added
+- Transaction fee calculation
+
+### Changed
+- Block and Balance structs moved to `core/types` package
 
 
 ## 4 Jul 2021
