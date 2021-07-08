@@ -1,6 +1,7 @@
 package wallets
 
 import (
+	"context"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
@@ -83,4 +84,14 @@ func (m *Manager) GetWallet(address common.Address, auth string) (*Wallet, error
 		KeyData: encryptedKey,
 		key:     key,
 	}, nil
+}
+
+func (m *Manager) Exists(ctx context.Context, address common.Address) error {
+	return m.db.View(func(txn *badger.Txn) error {
+		if _, err := txn.Get(address.Bytes()); err != nil {
+			return err
+		} else {
+			return nil
+		}
+	})
 }

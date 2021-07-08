@@ -20,6 +20,11 @@ func init() {
 	gob.Register(elliptic.P256())
 }
 
+const (
+	WalletStatusLocked   = "Locked"
+	WalletStatusUnlocked = "Unlocked"
+)
+
 type Wallet struct {
 	Auth    string `json:"auth" yaml:"auth"`
 	KeyData []byte `json:"-" yaml:"-"` // stores encrypted key
@@ -68,6 +73,14 @@ func (w *Wallet) Address() common.Address {
 
 func (w *Wallet) GetKey() *keystore.Key {
 	return w.key
+}
+
+func (w *Wallet) Status() string {
+	if w.key != nil {
+		return WalletStatusUnlocked
+	} else {
+		return WalletStatusLocked
+	}
 }
 
 func (w *Wallet) Open() error {
