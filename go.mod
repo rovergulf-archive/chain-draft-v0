@@ -3,14 +3,12 @@ module github.com/rovergulf/rbn
 go 1.16
 
 require (
-	github.com/DataDog/zstd v1.4.8 // indirect
 	github.com/HdrHistogram/hdrhistogram-go v1.1.0 // indirect
 	github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46 // indirect
 	github.com/btcsuite/btcd v0.22.0-beta // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
-	github.com/dgraph-io/badger/v3 v3.2103.0
+	github.com/dgraph-io/badger/v3 v3.2103.1
 	github.com/dgraph-io/dgo/v210 v210.0.0-20210421093152-78a2fece3ebd
-	github.com/dgraph-io/ristretto v0.1.0 // indirect
 	github.com/ethereum/go-ethereum v1.10.4
 	github.com/go-ole/go-ole v1.2.5 // indirect
 	github.com/golang/glog v0.0.0-20210429001901-424d2337a529 // indirect
