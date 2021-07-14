@@ -1,92 +1,71 @@
 package core
 
 import (
-	"bytes"
-	"crypto/sha256"
-	"encoding/gob"
-	"encoding/json"
+	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/rovergulf/rbn/core/types"
 )
 
-const (
-	TxFee   = uint64(50)
-	TxLimit = uint64(1 << 10)
-)
+func (bc *BlockChain) ListTransactions() ([]types.SignedTx, error) {
+	var txs []types.SignedTx
 
-// Transaction represents a Bitcoin transaction
-type Transaction struct {
-	From     common.Address  `json:"from" yaml:"from"`
-	To       *common.Address `json:"to" yaml:"to"` // destination of contract, use nil for contract creation
-	Value    int64           `json:"value" yaml:"value"`
-	Nonce    uint64          `json:"nonce" yaml:"nonce"`
-	Gas      uint64          `json:"gas" yaml:"gas"`
-	GasPrice uint64          `json:"gas_price" yaml:"gas_price"`
-	Data     []byte          `json:"data" yaml:"data"` // contract data
-	Time     uint64          `json:"time" yaml:"time"`
+	if err := bc.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = txsPrefix
+		it := txn.NewIterator(opts)
+		defer it.Close()
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			var tx types.SignedTx
+
+			if err := item.Value(func(val []byte) error {
+				return tx.Deserialize(val)
+			}); err != nil {
+				return err
+			}
+
+			txs = append(txs, tx)
+		}
+		return nil
+	}); err != nil {
+		bc.logger.Errorw("Unable to iterate db view", "err", err)
+		return nil, err
+	}
+
+	return txs, nil
 }
 
-type SignedTx struct {
-	Transaction
-	Sig []byte `json:"sig" yaml:"sig"`
+func (bc *BlockChain) FindTransaction(txHash common.Hash) (*types.SignedTx, error) {
+	var tx types.SignedTx
+
+	if err := bc.db.View(func(txn *badger.Txn) error {
+		key := txDbPrefix(txHash)
+		item, err := txn.Get(key)
+		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				return ErrTxNotExists
+			}
+			return err
+		}
+
+		return item.Value(func(val []byte) error {
+			return tx.Deserialize(val)
+		})
+	}); err != nil {
+		return nil, err
+	}
+
+	return &tx, nil
 }
 
-// Hash returns a hash of the transaction
-func (tx *Transaction) Hash() ([]byte, error) {
-	txCopy := *tx
-
-	serializedCopy, err := txCopy.Serialize()
+func (bc *BlockChain) SaveTx(txHash common.Hash, tx types.SignedTx) error {
+	encodedTx, err := tx.Serialize()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	hash := sha256.Sum256(serializedCopy)
-	return hash[:], nil
-}
-
-func (tx *Transaction) Serialize() ([]byte, error) {
-	var encoded bytes.Buffer
-
-	enc := gob.NewEncoder(&encoded)
-	if err := enc.Encode(tx); err != nil {
-		return nil, err
-	}
-
-	return encoded.Bytes(), nil
-}
-
-func DeserializeTransaction(data []byte) (*Transaction, error) {
-	var transaction Transaction
-
-	decoder := gob.NewDecoder(bytes.NewReader(data))
-	if err := decoder.Decode(&transaction); err != nil {
-		return nil, err
-	}
-
-	return &transaction, nil
-}
-
-func (tx Transaction) Encode() ([]byte, error) {
-	return json.Marshal(tx)
-}
-
-func DecodeTransaction(data []byte) (*Transaction, error) {
-	var transaction Transaction
-	if err := json.Unmarshal(data, &transaction); err != nil {
-		return nil, err
-	}
-	return &transaction, nil
-}
-
-// NewTransaction creates a new transaction
-func NewTransaction(from, to common.Address, amount int64, nonce uint64, data []byte) (*Transaction, error) {
-	return &Transaction{
-		From:     from,
-		To:       &to,
-		Value:    amount,
-		Nonce:    nonce,
-		Gas:      0,
-		GasPrice: 0,
-		Data:     data,
-		Time:     0,
-	}, nil
+	key := txDbPrefix(txHash)
+	return bc.db.Update(func(txn *badger.Txn) error {
+		return txn.Set(key, encodedTx)
+	})
 }

@@ -4,6 +4,139 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
+## 14 Jul 2021
+
+### Added
+- Reward transactions handle
+
+### Changed
+
+### Fixed
+
+### Removed
+
+
+## 13 Jul 2021
+
+### Added
+- `traceutil` package parent context option wrapper func
+
+
+## 9 Jul 2021
+
+### Added
+- sync known peers (to be tested)
+- prefixes for all kv database keys in BlockChain, also added wrapper functions
+- wallets manager address existsing method
+- wallet lock status method which returns "Un/Locked" string
+
+
+## 7 Jul 2021
+
+### Added
+- Added [Contributing guide](CONTRIBUTING.md)
+- I have lost a lot of time at trying to implement common database interface,
+  only after lot of spent time I get that it is not even good fits the idea
+  of separate interfaces and storages. It would be described in further docs:
+  this chain would be as disturbed, as you do not need to have the whole chain backup. 
+  Only the data compared with your node and accounts registered at network.
+
+
+## 6 Jul 2021
+
+### Added
+- Use receipts as transaction applied return result
+
+### Changed
+- node blockchain state run does not load genesis now
+- peer removes itself from mem cache discovery
+- gRPC client moved to separate `client` package – probably would be renamed and/or moved
+- Denomination for RNT renamed to Coin and would be used as Rovergulf Coins
+
+### Fixed
+
+### Removed
+
+
+## 5 Jul 2021
+
+### Added
+- Transaction fee calculation
+
+### Changed
+- Block and Balance structs moved to `core/types` package
+
+
+## 4 Jul 2021
+
+### Added
+- more `params` package constants, to be used in network consensus verification
+  and other places where constant values are important
+
+### Changed
+- Chain Genesis initialization now have hardcoded default values
+- `core` logic now separated from its types, as it would represent database interface of blockchain
+- some of `core` package used types now moved to `types` subdirectory package
+- No etherium **Gas** naming, use **Nether** as the lowest denomination of **Rovergulf Native Token**
+- `address` flag usage for cli application would be optimized
+
+### Removed
+- `node-id` flag usage
+
+
+## 3 Jul 2021
+
+### Added
+- node account dump command
+- transaction signer verification
+
+### Changed
+- Genesis initialization
+
+### Removed
+- legacy sync methods
+
+
+## 1 Jul 2021
+
+### Changed
+- provide address on node run, to switch node used account
+
+### Fixed
+- balance database saving
+
+### Removed
+- PoW usage
+
+
+## 30 Jun 2021
+
+### Added
+- node stop CLI command
+
+### Changed
+- get account key handler
+- sign transactions with open wallet
+- node currently asks for account passphrase to run (behavior should be updated)
+
+### Fixed
+- Genesis db encoding - removed `Transaction.MarshalJSON` method
+
+
+## 29 Jun 2021
+
+### Added
+- Added get block http handler
+- gRPC node connection interface instead custom TCP
+- genproto.sh script to generate rpc command
+- some gRPC handlers
+- change account auth phrase
+
+### Changed
+- wallets creation use mnemonic passphrase by `--mnemonic` 
+  flag value now, which is true by default.
+
+
 ## 28 Jun 2021
 
 ### Added
@@ -13,16 +146,13 @@ All notable changes to this project will be documented in this file.
 - Updated transaction signing using etherium SDK
 - Use Ether-like wallet balance design instead Bitcoin UTXO
 
-### Fixed
-
-### Removed
-
 
 ## 3 Jun 2021
 
 ### Changed
 - `Wallets` now are `Manager`
-- `repo` package moved to `database/badgerdb` to prepare multiple database backend interface
+- `repo` package moved to `database/badgerdb` 
+  to prepare multiple database backend interface
   - [Dgraph Go client](https://github.com/dgraph-io/dgo)
 
 

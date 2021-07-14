@@ -4,22 +4,23 @@ import (
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/opentracing/opentracing-go"
+	"github.com/rovergulf/rbn/core/types"
 	"go.uber.org/zap"
 )
 
-// BlockchainIterator is used to iterate over blockchain blocks
-type BlockchainIterator struct {
+// BlockChainIterator is used to iterate over blockchain blocks
+type BlockChainIterator struct {
 	CurrentHash common.Hash
-	Db          *badger.DB
+	db          *badger.DB
 	logger      *zap.SugaredLogger
 	tracer      opentracing.Tracer
 }
 
-// Iterator returns a BlockchainIterator
-func (bc *Blockchain) Iterator() *BlockchainIterator {
-	bci := &BlockchainIterator{
+// Iterator returns a BlockChainIterator
+func (bc *BlockChain) Iterator() *BlockChainIterator {
+	bci := &BlockChainIterator{
 		CurrentHash: bc.LastHash,
-		Db:          bc.Db,
+		db:          bc.db,
 		logger:      bc.logger,
 		tracer:      bc.tracer,
 	}
@@ -28,22 +29,23 @@ func (bc *Blockchain) Iterator() *BlockchainIterator {
 }
 
 // Next returns next block starting from the tip
-func (i *BlockchainIterator) Next() (*Block, error) {
-	var block *Block
+func (i *BlockChainIterator) Next() (*types.Block, error) {
+	var block *types.Block
 
-	if err := i.Db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(i.CurrentHash.Bytes())
+	if err := i.db.View(func(txn *badger.Txn) error {
+		key := blockDbPrefix(i.CurrentHash)
+		item, err := txn.Get(key)
 		if err != nil {
 			return err
 		}
 
 		return item.Value(func(val []byte) error {
-			nextBlock, err := DeserializeBlock(val)
-			if err != nil {
+			var nextBlock types.Block
+			if err := nextBlock.Deserialize(val); err != nil {
 				i.logger.Errorf("Unable to deserialize block: %s", err)
 				return err
 			} else {
-				block = nextBlock
+				block = &nextBlock
 			}
 			return nil
 		})

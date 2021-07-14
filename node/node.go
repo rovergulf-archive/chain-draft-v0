@@ -3,414 +3,288 @@ package node
 import (
 	"context"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/dgraph-io/badger/v3"
 	"github.com/gorilla/mux"
-	"github.com/opentracing/opentracing-go"
 	"github.com/rovergulf/rbn/core"
-	"github.com/rovergulf/rbn/pkg/config"
-	"github.com/rovergulf/rbn/pkg/exit"
+	"github.com/rovergulf/rbn/core/types"
+	"github.com/rovergulf/rbn/database/badgerdb"
+	"github.com/rovergulf/rbn/params"
+	"github.com/rovergulf/rbn/pkg/sigutil"
+	"github.com/rovergulf/rbn/pkg/traceutil"
 	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/viper"
-	"github.com/uber/jaeger-client-go"
-	jconf "github.com/uber/jaeger-client-go/config"
-	"github.com/uber/jaeger-lib/metrics/prometheus"
+	"go.etcd.io/etcd/raft/v3"
 	"go.uber.org/zap"
-	"io"
-	"io/ioutil"
-	"net"
+	"google.golang.org/grpc"
 	"os"
+	"sync"
 	"time"
 )
 
 const (
-	DefaultNodeIP      = "127.0.0.1"
-	DefaultNodePort    = 9420
-	HttpSSLPort        = 443
-	DefaultNetworkAddr = "127.0.0.1:9420"
-	rpcNetProtocol     = "tcp"
+	DbFileName = "node.db"
+
+	DefaultNodeIP   = "127.0.0.1"
+	DefaultNodePort = 9420
+	HttpSSLPort     = 443
 
 	endpointStatus  = "/node/status"
 	endpointSync    = "/node/sync"
 	endpointAddPeer = "/node/peer"
-
-	RootAddress  = "0x59fc6df01d2e84657faba24dc96e14871192bda4"
-	DefaultMiner = "0x0000000000000000000000000000000000000000"
 )
 
 // Node represents blockchain network peer node
 type Node struct {
 	metadata PeerNode
+	account  *wallets.Wallet
 
-	config      config.Options
-	bc          *core.Blockchain
-	wm          *wallets.Manager
+	config params.Options
+
+	bc *core.BlockChain
+	wm *wallets.Manager
+	db *badger.DB
+
+	grpcServer  *grpc.Server
 	httpHandler httpServer
-	rpcListener net.Listener
 
-	isMining bool
+	inGenRace bool
 
 	knownPeers knownPeers
 
-	pendingTXs map[string]*core.SignedTx
+	pendingState *pendingState
 
-	proposedBlocks chan *core.Block
-	proposedTXs    chan *core.Transaction
-	errCh          chan error
+	newSyncBlocks chan types.Block
+	newSyncTXs    chan types.SignedTx
 
+	raftStorage *raft.MemoryStorage
 	//Lock *sync.RWMutex
 
 	logger *zap.SugaredLogger
-	tracer opentracing.Tracer
-	closer io.Closer
+	tracer traceutil.Tracer
 }
 
 // New creates and returns new node if blockchain available
-func New(opts config.Options) (*Node, error) {
-	nodeAddr := viper.GetString("node.addr")
-	nodePort := viper.GetUint64("node.port")
-	peerNodeAddr := fmt.Sprintf("%s:%d", nodeAddr, nodePort)
-
-	pn := PeerNode{
-		Ip:        nodeAddr,
-		Port:      nodePort,
-		Root:      peerNodeAddr == DefaultNetworkAddr,
-		Account:   common.HexToAddress(opts.Address),
-		connected: false,
-	}
-
+func New(opts params.Options) (*Node, error) {
 	n := &Node{
-		metadata: pn,
 		httpHandler: httpServer{
 			router: mux.NewRouter(),
 			logger: opts.Logger,
+			tracer: opts.Tracer,
 		},
-		config:     opts,
-		bc:         nil,
-		logger:     opts.Logger,
-		knownPeers: make(map[string]PeerNode),
+		config: opts,
+		bc:     nil,
+		logger: opts.Logger,
+		knownPeers: knownPeers{
+			peers: makeDefaultTrustedPeers(),
+			lock:  new(sync.RWMutex),
+		},
+		pendingState:  newPendingState(),
+		newSyncTXs:    make(chan types.SignedTx),
+		newSyncBlocks: make(chan types.Block),
 		//Lock:       new(sync.RWMutex),
-	}
-
-	jaegerTraceAddr := viper.GetString("jaeger_trace")
-	if len(jaegerTraceAddr) > 0 {
-		tracer, closer, err := n.initOpentracing(jaegerTraceAddr)
-		if err != nil {
-			return nil, err
-		} else {
-			n.tracer = tracer
-			n.closer = closer
-			n.httpHandler.tracer = tracer
-		}
 	}
 
 	return n, nil
 }
 
-func (n *Node) Run() error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	nodeAddress := fmt.Sprintf("%s:%d", n.metadata.Ip, n.metadata.Port)
-
-	httpApiAddress := fmt.Sprintf("%s:%s",
-		viper.GetString("http.addr"),
-		viper.GetString("http.port"),
-	)
-
-	n.logger.Infow("Starting node...",
-		"addr", nodeAddress, "is_root", n.metadata.Root)
-
-	exit.ListenExit(func(signal os.Signal) {
-		n.logger.Warnf("Signal [%s] received. Graceful shutdown", signal)
+func (n *Node) Init(ctx context.Context) error {
+	sigutil.ListenExit(func(signal os.Signal) {
+		n.logger.Warnf("Signal [%s] received. Graceful shutdown initialized.", signal)
 		time.AfterFunc(15*time.Second, func() {
 			n.logger.Fatal("Failed to gracefully shutdown after 15 sec. Force exit")
 		})
 		n.Shutdown()
 	})
 
-	chain, err := core.ContinueBlockchain(n.config)
+	tracer, err := traceutil.NewTracerFromViperConfig()
 	if err != nil {
+		if err != traceutil.ErrCollectorUrlNotSpecified {
+			return err
+		}
+	} else {
+		n.tracer = tracer
+		n.httpHandler.tracer = tracer
+	}
+
+	db, err := badgerdb.OpenDB(viper.GetString("data_dir"), badger.DefaultOptions(n.config.NodeFilePath))
+	if err != nil {
+		n.logger.Errorf("Unable to open db file: %s", err)
 		return err
 	}
-	defer chain.Shutdown()
-	n.bc = chain
+	n.db = db
+
+	chain, err := core.NewBlockChain(n.config)
+	if err != nil {
+		n.logger.Errorf("Unable to continue blockchain: %s", err)
+		return err
+	} else {
+		n.bc = chain
+	}
+
+	if err := chain.LoadChainState(ctx); err != nil {
+		n.logger.Errorf("Unable to continue blockchain: %s", err)
+		return err
+	}
 
 	n.wm, err = wallets.NewManager(n.config)
 	if err != nil {
+		n.logger.Errorf("Unable to init wallets manager: %s", err)
 		return err
 	}
 
-	ln, err := net.Listen(rpcNetProtocol, nodeAddress)
-	if err != nil {
+	if err := n.setupNodeAccount(); err != nil {
+		n.logger.Errorf("Unable to setup node account: %s", err)
 		return err
-	} else {
-		n.rpcListener = ln
+	}
+	n.logger.Debugf("Node account: %s", n.account.Address())
+
+	n.setNetworkMetadata(ctx)
+
+	if err := n.syncKeystoreBalances(ctx); err != nil {
+		n.logger.Errorf("Unable to sync keystore balances with chain state: %s", err)
 	}
 
-	if !n.metadata.Root {
-	} else {
+	return nil
+}
+
+// temporally method i think // TBD set default
+func (n *Node) setNetworkMetadata(ctx context.Context) {
+	nodeAddr := viper.GetString("node.addr")
+	nodePort := viper.GetUint64("node.port")
+	syncMode := viper.GetString("node.sync_mode")
+	if syncMode == "" {
+		syncMode = string(SyncModeDefault)
 	}
 
+	n.metadata = NewPeerNode(nodeAddr, nodePort, n.account.Address(), SyncMode(syncMode))
+}
+
+func (n *Node) Run(ctx context.Context) error {
+	nodeAddress := fmt.Sprintf("%s:%d", n.metadata.Ip, n.metadata.Port)
+	n.logger.Infow("Starting node...",
+		"addr", nodeAddress, "is_root", n.metadata.Root)
 	go func() {
-		n.logger.Debugw("Listening TCP", "addr", nodeAddress)
-		for {
-			conn, err := n.rpcListener.Accept()
-			if err != nil {
-				n.logger.Errorf("Unable to accept connection from %s", conn.LocalAddr())
-			}
-			go func() {
-				if err := n.HandleConnection(conn); err != nil {
-					n.logger.Errorf("Unable to handle connection from %s", conn.LocalAddr())
-				}
-			}()
+		n.logger.Debugw("Listening gRPC", "addr", nodeAddress)
+		grpcSrv, err := n.PrepareGrpcServer()
+		if err != nil {
+			n.logger.Errorf("Unable to prepare gRPC server: %s", err)
+			n.Shutdown()
+		}
+		n.grpcServer = grpcSrv
+
+		if err := n.RunGrpcServer(nodeAddress); err != nil {
+			n.logger.Errorf("Unable to start gRPC server: %s", err)
+			n.Shutdown()
 		}
 	}()
 
-	go n.mine(ctx)
+	go n.race(ctx)
+	go n.sync(ctx)
 
+	httpApiAddress := fmt.Sprintf("%s:%s",
+		viper.GetString("http.addr"),
+		viper.GetString("http.port"),
+	)
 	n.logger.Infow("Listening HTTP", "addr", httpApiAddress)
 	return n.serveHttp()
 }
 
 func (n *Node) Shutdown() {
+	defer close(n.newSyncTXs)
+	defer close(n.newSyncBlocks)
+
+	var wg sync.WaitGroup
+
+	if n.db != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := n.db.Close(); err != nil {
+				n.logger.Errorf("Unable to close node db: %s", err)
+			}
+		}()
+	}
+
 	if n.bc != nil {
-		n.bc.Shutdown()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			n.bc.Shutdown()
+		}()
 	}
 
 	if n.wm != nil {
-		n.wm.Shutdown()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			n.wm.Shutdown()
+		}()
 	}
 
-	if n.rpcListener != nil {
-		if err := n.rpcListener.Close(); err != nil {
-			n.logger.Errorf("Unable to close rpc listener: %s", err)
-		}
+	if n.grpcServer != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			n.grpcServer.GracefulStop()
+		}()
 	}
-
-	if n.closer != nil {
-		if err := n.closer.Close(); err != nil {
-			n.logger.Errorf("Unable to close tracing writer: %s", err)
-		}
-	}
-}
-
-func (n *Node) IsKnownPeer(peer PeerNode) bool {
-	_, ok := n.knownPeers[peer.Account.Hex()]
-	return ok
-}
-
-func (n *Node) HandleConnection(conn net.Conn) error {
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	defer conn.Close()
-
-	req, err := ioutil.ReadAll(conn)
-	if err != nil {
-		return err
-	}
-
-	command := BytesToCmd(req[:12])
 
 	if n.tracer != nil {
-		span := n.tracer.StartSpan("node_rpc_conn")
-		span.SetTag("cmd", command)
-		ctx = opentracing.ContextWithSpan(ctx, span)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			n.tracer.Close()
+		}()
 	}
 
-	n.logger.Debugf("Received [%s] command", command)
+	wg.Wait()
 
-	switch command {
-	case "sync":
-		return nil
-		//return HandleAddr(req)
-	case "block":
-		return nil
-		//return HandleBlock(req, chain)
-	case "inv":
-		return nil
-		//return HandleInv(req, chain)
-	case "getblocks":
-		return nil
-		//return HandleGetBlocks(req, chain)
-	case "getdata":
-		return nil
-		//return HandleGetData(req, chain)
-	case "tx":
-		return nil
-		//return HandleTx(req, chain)
-	case "version":
-		return nil
-		//return HandleVersion(req, chain)
-	default:
-		return fmt.Errorf("unknown command")
-	}
+	os.Exit(0)
 }
 
-func CmdToBytes(cmd string) []byte {
-	var bytes [12]byte
-
-	for i, c := range cmd {
-		bytes[i] = byte(c)
-	}
-
-	return bytes[:]
-}
-
-func BytesToCmd(bytes []byte) string {
-	var cmd []byte
-
-	for _, b := range bytes {
-		if b != 0x0 {
-			cmd = append(cmd, b)
-		}
-	}
-
-	return fmt.Sprintf("%s", cmd)
-}
-
-func (n *Node) initOpentracing(address string) (opentracing.Tracer, io.Closer, error) {
-	metrics := prometheus.New()
-
-	traceTransport, err := jaeger.NewUDPTransport(address, 0)
-	if err != nil {
-		n.logger.Errorf("Unable to setup tracing agent connection: %s", err)
-		return nil, nil, err
-	}
-
-	tracer, closer, err := jconf.Configuration{
-		ServiceName: "rbn",
-	}.NewTracer(
-		jconf.Sampler(jaeger.NewConstSampler(true)),
-		jconf.Reporter(jaeger.NewRemoteReporter(
-			traceTransport,
-			jaeger.ReporterOptions.Logger(jaeger.StdLogger)),
-		),
-		jconf.Metrics(metrics),
-	)
-	if err != nil {
-		n.logger.Errorf("Unable to start tracer: %s", err)
-		return nil, nil, err
-	}
-
-	n.logger.Debugw("Jaeger tracing client initialized", "collector_url", address)
-	return tracer, closer, nil
-}
-
-func (n *Node) collectNetInterfaces() error {
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		n.logger.Errorf("Unable to get net interfaces: %s", err)
-		return err
-	}
-
-	for _, i := range ifaces {
-		addrs, err := i.Addrs()
-		if err != nil {
-			n.logger.Errorf("Unable to get net interface addrs: %s", err)
-			return err
-		}
-		for _, addr := range addrs {
-			var ip net.IP
-			switch v := addr.(type) {
-			case *net.IPNet:
-				ip = v.IP
-				n.logger.Debugf("Discovered local IP network: %s", ip)
-			case *net.IPAddr:
-				ip = v.IP
-				n.logger.Debugf("Discovered local IP address: %s", ip)
-			}
-		}
-	}
-
-	return nil
-}
-
-func (n *Node) mine(ctx context.Context) error {
+func (n *Node) race(ctx context.Context) {
 	var miningCtx context.Context
-	var stopCurrentMining context.CancelFunc
+	var stopCurrentRace context.CancelFunc
 
-	ticker := time.NewTicker(time.Second * miningIntervalSeconds)
+	ticker := time.NewTicker(time.Second * 10)
 
 	for {
 		select {
 		case <-ticker.C:
 			go func() {
-				if len(n.proposedTXs) > 0 && !n.isMining {
-					n.isMining = true
+				pendingTxs := n.pendingState.pendingTxLen()
+				if pendingTxs > 0 && !n.inGenRace {
+					n.logger.Debugw("There is transactions available", "txs", pendingTxs)
+					n.inGenRace = true
+					miningCtx, stopCurrentRace = context.WithCancel(ctx)
 
-					miningCtx, stopCurrentMining = context.WithCancel(ctx)
-					err := n.minePendingTXs(miningCtx)
+					block, err := n.generateBlock(miningCtx)
 					if err != nil {
-						fmt.Printf("ERROR: %s\n", err)
+						n.logger.Errorf("Failed to generate new block: %s", err)
 					}
 
-					n.isMining = false
+					n.inGenRace = false
+
+					n.logger.Debugf("block generated: %s", block.BlockHeader.BlockHash)
 				}
 			}()
-
-		case block, _ := <-n.proposedBlocks:
-			if n.isMining {
-				if err := block.SetHash(); err != nil {
-
-				}
-				fmt.Printf("\nPeer mined next Block '%s' faster :(\n", block.Hash.Hex())
-
-				n.removeMinedPendingTXs(block)
-				stopCurrentMining()
+		case tx := <-n.newSyncTXs:
+			n.logger.Debugw("New pending tx appeared", "is_racing", n.inGenRace)
+			if _, err := n.AddPendingTX(ctx, tx, n.metadata); err != nil {
+				n.logger.Errorf("Unable to add pending tx: %s", err)
+			}
+		case block, _ := <-n.newSyncBlocks:
+			n.logger.Debugw("Proposed block appeared", "is_racing", n.inGenRace)
+			if n.inGenRace {
+				n.logger.Warnf("Another peer has won the game '%s'! :(", block.BlockHeader.BlockHash.Hex())
+				n.removeAppliedPendingTXs(ctx, &block)
+				stopCurrentRace()
 			}
 
 		case <-ctx.Done():
 			ticker.Stop()
-			return nil
-		}
-	}
-}
-
-func (n *Node) minePendingTXs(ctx context.Context) error {
-	if len(n.pendingTXs) == 0 {
-		return fmt.Errorf("no transactions available")
-	}
-
-	var txs []*core.SignedTx
-
-	for i := range n.pendingTXs {
-		txs = append(txs, n.pendingTXs[i])
-	}
-
-	blockToMine := NewPendingBlock(
-		n.bc.LastHash,
-		n.bc.ChainLength.Uint64(),
-		n.metadata.Account,
-		txs,
-	)
-
-	minedBlock, err := Mine(ctx, blockToMine)
-	if err != nil {
-		return err
-	}
-
-	n.removeMinedPendingTXs(minedBlock)
-
-	if err := n.bc.AddBlock(minedBlock); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (n *Node) removeMinedPendingTXs(block *core.Block) {
-	if len(block.Transactions) > 0 && len(n.pendingTXs) > 0 {
-		fmt.Println("Updating in-memory Pending TXs Pool:")
-	}
-
-	for _, tx := range block.Transactions {
-		txHash, _ := tx.Hash()
-		txh := common.BytesToHash(txHash)
-		if _, exists := n.pendingTXs[txh.Hex()]; exists {
-			fmt.Printf("\t-archiving mined TX: %s\n", txh.Hex())
-
-			delete(n.pendingTXs, txh.Hex())
+			n.logger.Debug("Party context cancelled")
+			break
 		}
 	}
 }

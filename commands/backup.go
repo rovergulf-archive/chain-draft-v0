@@ -34,8 +34,6 @@ func backupNewCmd() *cobra.Command {
 		},
 	}
 
-	addNodeIdFlag(backupNewCmd)
-
 	return backupNewCmd
 }
 
@@ -51,7 +49,6 @@ func backupListCmd() *cobra.Command {
 	}
 
 	addOutputFormatFlag(backupListCmd)
-	addNodeIdFlag(backupListCmd)
 
 	return backupListCmd
 }
@@ -66,8 +63,6 @@ func backupRestoreCmd() *cobra.Command {
 			return nil
 		},
 	}
-
-	addNodeIdFlag(backupRestoreCmd)
 
 	return backupRestoreCmd
 }

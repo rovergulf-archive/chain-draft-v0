@@ -12,59 +12,98 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
-	"github.com/rovergulf/rbn/core"
-	"log"
+	"github.com/rovergulf/rbn/core/types"
+	"github.com/tyler-smith/go-bip39"
+)
+
+func init() {
+	gob.Register(elliptic.P256())
+}
+
+const (
+	WalletStatusLocked   = "Locked"
+	WalletStatusUnlocked = "Unlocked"
 )
 
 type Wallet struct {
-	Address common.Address `json:"address" yaml:"address"`
-	Balance int            `json:"balance" yaml:"balance"`
-	Data    []byte         `json:"-" yaml:"-"`
-	Key     *keystore.Key  `json:"-" yaml:"-"`
+	Auth    string `json:"auth" yaml:"auth"`
+	KeyData []byte `json:"-" yaml:"-"` // stores encrypted key
+	key     *keystore.Key
 }
 
 func (w *Wallet) Serialize() ([]byte, error) {
-	buf := bytes.Buffer{}
-
-	gob.Register(elliptic.P256())
+	var buf bytes.Buffer
 	encoder := gob.NewEncoder(&buf)
 	if err := encoder.Encode(w); err != nil {
-		log.Panic(err)
+		return nil, err
 	}
 
 	return buf.Bytes(), nil
 }
 
-func (w *Wallet) SignTx(tx *core.Transaction) (*core.SignedTx, error) {
+func (w *Wallet) Deserialize(data []byte) error {
+	decoder := gob.NewDecoder(bytes.NewReader(data))
+	return decoder.Decode(w)
+}
+
+func (w *Wallet) SignTx(tx *types.Transaction) (*types.SignedTx, error) {
+	if w.key == nil {
+		return nil, ErrAccountIsLocked
+	}
+
 	rawTx, err := tx.Serialize()
 	if err != nil {
 		return nil, err
 	}
 
-	sig, err := Sign(rawTx, w.Key.PrivateKey)
+	sig, err := Sign(rawTx, w.key.PrivateKey)
 	if err != nil {
 		return nil, err
 	}
 
-	return &core.SignedTx{
+	return &types.SignedTx{
 		Transaction: *tx,
 		Sig:         sig,
 	}, nil
 }
 
-func DeserializeWallet(data []byte) (*Wallet, error) {
-	var w Wallet
-
-	gob.Register(elliptic.P256())
-	decoder := gob.NewDecoder(bytes.NewReader(data))
-	if err := decoder.Decode(&w); err != nil {
-		return nil, err
-	}
-
-	return &w, nil
+func (w *Wallet) Address() common.Address {
+	return w.key.Address
 }
 
-func SignTx(tx core.Transaction, privKey *ecdsa.PrivateKey) ([]byte, error) {
+func (w *Wallet) GetKey() *keystore.Key {
+	return w.key
+}
+
+func (w *Wallet) Status() string {
+	if w.key != nil {
+		return WalletStatusUnlocked
+	} else {
+		return WalletStatusLocked
+	}
+}
+
+func (w *Wallet) Open() error {
+	key, err := keystore.DecryptKey(w.KeyData, w.Auth)
+	if err != nil {
+		return err
+	}
+
+	w.key = key
+	return nil
+}
+
+func (w *Wallet) EncryptKey() error {
+	data, err := keystore.EncryptKey(w.key, w.Auth, keystore.StandardScryptN, keystore.StandardScryptP)
+	if err != nil {
+		return err
+	}
+
+	w.KeyData = data
+	return nil
+}
+
+func SignTx(tx types.Transaction, privKey *ecdsa.PrivateKey) ([]byte, error) {
 	rawTx, err := tx.Serialize()
 	if err != nil {
 		return nil, err
@@ -78,9 +117,20 @@ func SignTx(tx core.Transaction, privKey *ecdsa.PrivateKey) ([]byte, error) {
 	return sig, nil
 }
 
+func NewSignedTx(tx types.Transaction, privKey *ecdsa.PrivateKey) (types.SignedTx, error) {
+	sig, err := SignTx(tx, privKey)
+	if err != nil {
+		return types.SignedTx{}, nil
+	}
+
+	return types.SignedTx{
+		Transaction: tx,
+		Sig:         sig,
+	}, nil
+}
+
 func Sign(msg []byte, privKey *ecdsa.PrivateKey) (sig []byte, err error) {
 	msgHash := sha256.Sum256(msg)
-
 	return crypto.Sign(msgHash[:], privKey)
 }
 
@@ -108,4 +158,16 @@ func NewRandomKey() (*keystore.Key, error) {
 	}
 
 	return key, nil
+}
+
+func NewRandomMnemonic() (string, error) {
+	entropy, err := bip39.NewEntropy(256)
+	if err != nil {
+		return "", err
+	}
+	mnemonic, err := bip39.NewMnemonic(entropy)
+	if err != nil {
+		return "", err
+	}
+	return mnemonic, nil
 }

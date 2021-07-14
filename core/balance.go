@@ -1,56 +1,21 @@
 package core
 
 import (
-	"bytes"
-	"encoding/gob"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
-	"math/big"
+	"github.com/rovergulf/rbn/core/types"
 )
 
-var (
-	balancesPrefix = []byte("balances/")
-)
+func (bc *BlockChain) GetBalance(addr common.Address) (*types.Balance, error) {
+	var balance types.Balance
 
-type Balance struct {
-	Address common.Address `json:"address" yaml:"address"`
-	Balance *big.Int       `json:"balance" yaml:"balance"`
-	Nonce   uint64         `json:"nonce" yaml:"nonce"`
-	//Storage    map[common.Hash]common.Hash `json:"storage" yaml:"storage"`
-	//Code       []byte                      `json:"code" yaml:"code"`
-	//PrivateKey []byte                      `json:"private_key" yaml:"private_key"`
-}
-
-func (b *Balance) Serialize() ([]byte, error) {
-	var result bytes.Buffer
-	encoder := gob.NewEncoder(&result)
-	if err := encoder.Encode(*b); err != nil {
-		return nil, err
-	}
-
-	return result.Bytes(), nil
-}
-
-func (b *Balance) Deserialize(data []byte) error {
-	decoder := gob.NewDecoder(bytes.NewReader(data))
-	if err := decoder.Decode(b); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-type Balances struct {
-	*Blockchain
-}
-
-func (b *Balances) GetBalance(addr common.Address) (*Balance, error) {
-	var balance Balance
-
-	key := append(balancesPrefix, addr.Bytes()...)
-	if err := b.Db.View(func(txn *badger.Txn) error {
+	key := balanceDbPrefix(addr)
+	if err := bc.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(key)
 		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				return ErrBalanceNotExists
+			}
 			return err
 		}
 
@@ -64,17 +29,17 @@ func (b *Balances) GetBalance(addr common.Address) (*Balance, error) {
 	return &balance, nil
 }
 
-func (b *Balances) ListBalances() ([]*Balance, error) {
-	var balances []*Balance
+func (bc *BlockChain) ListBalances() ([]*types.Balance, error) {
+	var balances []*types.Balance
 
-	if err := b.Db.View(func(txn *badger.Txn) error {
+	if err := bc.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.Prefix = balancesPrefix
 		it := txn.NewIterator(opts)
 		defer it.Close()
 		for it.Rewind(); it.Valid(); it.Next() {
 			item := it.Item()
-			var balance Balance
+			var balance types.Balance
 
 			if err := item.Value(func(val []byte) error {
 				return balance.Deserialize(val)
@@ -86,9 +51,47 @@ func (b *Balances) ListBalances() ([]*Balance, error) {
 		}
 		return nil
 	}); err != nil {
-		b.logger.Errorw("Unable to iterate db view", "err", err)
+		bc.logger.Errorw("Unable to iterate db view", "err", err)
 		return nil, err
 	}
 
 	return balances, nil
+}
+
+func (bc *BlockChain) NewBalance(addr common.Address, value uint64) (*types.Balance, error) {
+	balance := &types.Balance{
+		Address: addr,
+		Balance: value,
+		Nonce:   0,
+	}
+
+	data, err := balance.Serialize()
+	if err != nil {
+		return nil, err
+	}
+
+	key := balanceDbPrefix(addr)
+	if err := bc.db.Update(func(txn *badger.Txn) error {
+		if _, err := txn.Get(key); err == nil {
+			return ErrBalanceAlreadyExists
+		}
+
+		return txn.Set(key, data)
+	}); err != nil {
+		return nil, err
+	}
+
+	return balance, nil
+}
+
+func (bc *BlockChain) GetNextAccountNonce(addr common.Address) uint64 {
+	b, err := bc.GetBalance(addr)
+	if err != nil {
+		if err != badger.ErrKeyNotFound {
+			bc.logger.Errorw("Unable to get balance: %s", err)
+		}
+		return 0
+	}
+
+	return b.Nonce + 1
 }

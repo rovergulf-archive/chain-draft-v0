@@ -1,17 +1,18 @@
 package commands
 
 import (
+	"crypto/tls"
 	"fmt"
 	homedir "github.com/mitchellh/go-homedir"
-	"github.com/opentracing/opentracing-go"
+	"github.com/rovergulf/rbn/core"
+	"github.com/rovergulf/rbn/node"
+	"github.com/rovergulf/rbn/params"
+	"github.com/rovergulf/rbn/pkg/traceutil"
+	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/uber/jaeger-client-go"
-	"github.com/uber/jaeger-client-go/config"
-	"github.com/uber/jaeger-lib/metrics/prometheus"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"io"
 	"log"
 	"os"
 )
@@ -19,17 +20,18 @@ import (
 var (
 	cfgFile, dataDir string
 	logger           *zap.SugaredLogger
-	//bc *core.Blockchain
-	//node *node.Node
+	blockChain       *core.BlockChain
+	accountManager   *wallets.Manager
+	localNode        *node.Node
 )
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:     "rbn",
-	Short:   "Rovergulf Blockchain CLI",
-	Long:    `Rovergulf Blockchain Network SDK`,
+	Short:   "Rovergulf BlockChain CLI",
+	Long:    `Rovergulf BlockChain Network SDK`,
 	Version: "0.0.1-dev",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	PreRunE: func(cmd *cobra.Command, args []string) error {
 		ver, _ := cmd.Flags().GetBool("version")
 		if ver {
 			return writeOutput(cmd, cmd.Version)
@@ -37,13 +39,14 @@ var rootCmd = &cobra.Command{
 			return cmd.Usage()
 		}
 	},
+	SilenceUsage: true,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		logger.Error(err)
 		os.Exit(1)
 	}
 }
@@ -58,11 +61,15 @@ func init() {
 	rootCmd.PersistentFlags().Bool("log_json", false, "Enable JSON formatted logs output")
 	rootCmd.PersistentFlags().Int("log_level", int(zapcore.DebugLevel), "Log level")
 	rootCmd.PersistentFlags().Bool("log_stacktrace", false, "Log stacktrace verbose")
+	rootCmd.PersistentFlags().Bool("dev", false, "Enable development/testing environment")
 
 	// main flags
-	rootCmd.PersistentFlags().StringVar(&dataDir, "data_dir", os.Getenv("DATA_DIR"), "Blockchain data directory")
+	rootCmd.PersistentFlags().StringVar(&dataDir, "data_dir", os.Getenv("DATA_DIR"), "BlockChain data directory")
+	rootCmd.PersistentFlags().StringVar(&dataDir, "network_id", params.MainNetworkId, "Chain network id")
 
 	// bind viper values
+	bindViperPersistentFlag(rootCmd, "network.id", "network_id")
+	bindViperPersistentFlag(rootCmd, "app.dev", "dev")
 	bindViperPersistentFlag(rootCmd, "log_json", "log_json")
 	bindViperPersistentFlag(rootCmd, "log_level", "log_level")
 	bindViperPersistentFlag(rootCmd, "log_stacktrace", "log_stacktrace")
@@ -70,6 +77,25 @@ func init() {
 
 	// show version
 	rootCmd.Flags().BoolP("version", "v", false, "Display version")
+
+	// other commands
+
+	// balances
+	rootCmd.AddCommand(balancesCmd)
+	balancesCmd.AddCommand(balancesListCmd())
+	balancesCmd.AddCommand(balancesGetCmd())
+
+	// chain
+	rootCmd.AddCommand(blockchainCmd())
+
+	// node
+	rootCmd.AddCommand(nodeCmd())
+
+	// tx
+	rootCmd.AddCommand(txCmd())
+
+	// wallets
+	rootCmd.AddCommand(walletsCmd())
 
 	initZapLogger()
 }
@@ -106,19 +132,17 @@ func initConfig() {
 
 func setConfigDefaults() {
 	viper.SetDefault("metrics", true)
-	viper.SetDefault("jaeger_trace", os.Getenv("JAEGER_TRACE"))
+	viper.SetDefault(traceutil.JaegerTraceConfigKey, os.Getenv("JAEGER_TRACE"))
 
 	viper.SetDefault("node_id", "")
-
-	// node
-	viper.SetDefault("root", "0x59fc6df01d2e84657faba24dc96e14871192bda4")
-	viper.SetDefault("miner", "0x0000000000000000000000000000000000000000")
 
 	// storage
 	viper.SetDefault("db", "")
 	viper.SetDefault("data_dir", "tmp")
-	viper.SetDefault("backup_dir", backupsDir)
+	viper.SetDefault("keystore", "")
+	viper.SetDefault("pid_file", "/var/run/rbn/pidfile")
 
+	// TBD dgraph connection settings -
 	viper.SetDefault("dgraph.enabled", false)
 	viper.SetDefault("dgraph.host", "127.0.0.1")
 	viper.SetDefault("dgraph.port", "9080")
@@ -132,24 +156,32 @@ func setConfigDefaults() {
 	viper.SetDefault("ssl.cert", "")
 	viper.SetDefault("ssl.key", "")
 	viper.SetDefault("ssl.verify", false)
+	viper.SetDefault("ssl.mode", tls.NoClientCert)
 
-	// bootstrap server
-	viper.SetDefault("network.id", 1)                  //
-	viper.SetDefault("network.host", "127.0.0.1:9420") // swarm.rovergulf.net:443
+	// chain network setup
+	viper.SetDefault("network.id", params.MainNetworkId)
+	viper.SetDefault("network.addr", "127.0.0.1:9420")
+	viper.SetDefault("network.discovery", "swarm.rovergulf.net:443")
 
 	// http server
 	viper.SetDefault("node.addr", "127.0.0.1")
 	viper.SetDefault("node.port", 9420)
+	viper.SetDefault("node.sync_mode", node.SyncModeDefault)
 	viper.SetDefault("node.sync_interval", 5)
 	viper.SetDefault("node.cache_dir", "")
 
+	viper.SetDefault("http.disabled", false)
 	viper.SetDefault("http.addr", "127.0.0.1")
-	viper.SetDefault("http.port", 9069)
+	viper.SetDefault("http.port", 9469)
 
 	// TBD
+	// Cache
+	//viper.SetDefault("cache.enabled", false)
+	viper.SetDefault("cache.size", 256<<20) // 256mb
+
 	// Runtime configuration
-	//viper.SetDefault("runtime.max_cpu", runtime.NumCPU()) // take 2/3 available by default
-	//viper.SetDefault("runtime.max_mem", getAvailableOSMemory()) // same as above
+	//viper.SetDefault("runtime.max_cpu", runtime.NumCPU())
+	//viper.SetDefault("runtime.max_mem", getAvailableOSMemory())
 
 }
 
@@ -177,33 +209,4 @@ func initZapLogger() {
 	}
 
 	logger = l.Sugar()
-	viper.Set("logger", logger)
-}
-
-func initOpentracing(address string) (opentracing.Tracer, io.Closer, error) {
-	metrics := prometheus.New()
-
-	traceTransport, err := jaeger.NewUDPTransport(address, 0)
-	if err != nil {
-		logger.Errorf("Unable to setup tracing agent connection: %s", err)
-		return nil, nil, err
-	}
-
-	tracer, closer, err := config.Configuration{
-		ServiceName: "rbn",
-	}.NewTracer(
-		config.Sampler(jaeger.NewConstSampler(true)),
-		config.Reporter(jaeger.NewRemoteReporter(
-			traceTransport,
-			jaeger.ReporterOptions.Logger(jaeger.StdLogger)),
-		),
-		config.Metrics(metrics),
-	)
-	if err != nil {
-		logger.Errorf("Unable to start tracer: %s", err)
-		return nil, nil, err
-	}
-
-	logger.Debugw("Jaeger tracing client initialized", "collector_url", address)
-	return tracer, closer, nil
 }

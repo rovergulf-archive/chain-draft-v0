@@ -1,4 +1,4 @@
-package exit
+package sigutil
 
 import (
 	"os"

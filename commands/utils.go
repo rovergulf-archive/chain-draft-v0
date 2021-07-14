@@ -1,9 +1,12 @@
 package commands
 
 import (
+	"context"
+	"fmt"
 	"github.com/rovergulf/rbn/core"
-	"github.com/rovergulf/rbn/pkg/config"
-	"github.com/rovergulf/rbn/pkg/response"
+	"github.com/rovergulf/rbn/node"
+	"github.com/rovergulf/rbn/params"
+	"github.com/rovergulf/rbn/pkg/resutil"
 	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -12,44 +15,65 @@ import (
 	"path"
 )
 
-func getNodeDataPath() string {
-	return path.Join(viper.GetString("data_dir"), viper.GetString("node_id"))
-}
-
 func getBackupDirPath() string {
-	return path.Join(getNodeDataPath(), viper.GetString("backup_dir"))
+	return path.Join(viper.GetString("data_dir"), viper.GetString("backup_dir"))
 }
 
-func getDbFilePath() string {
-	return path.Join(getNodeDataPath(), core.DbFileName)
+func getChainDbFilePath() string {
+	return path.Join(viper.GetString("data_dir"), core.DbFileName)
 }
 
-func getWalletFilePath() string {
-	return path.Join(getNodeDataPath(), wallets.DbWalletFile)
+func getWalletsDbFilePath() string {
+	return path.Join(viper.GetString("data_dir"), wallets.DbWalletFile)
 }
 
-func getBlockchainConfig(cmd *cobra.Command) config.Options {
-	address := viper.GetString("address")
-	nodeId := viper.GetString("node_id")
+func getNodeDbFilePath() string {
+	return path.Join(viper.GetString("data_dir"), node.DbFileName)
+}
 
-	if len(nodeId) == 0 {
-		nodeId, _ = cmd.Flags().GetString("node-id")
-		viper.Set("node_id", nodeId)
+func prepareBlockChain(cmd *cobra.Command, args []string) error {
+	bc, err := core.NewBlockChain(getBlockChainConfig(cmd))
+	if err != nil {
+		return err
+	} else {
+		blockChain = bc
+	}
+	fmt.Println(blockChain != nil)
+	return nil
+}
+
+func prepareWalletsManager(cmd *cobra.Command, args []string) error {
+	wm, err := wallets.NewManager(getBlockChainConfig(cmd))
+	if err != nil {
+		return err
 	}
 
-	if len(address) == 0 {
-		address, _ = cmd.Flags().GetString("address")
-		viper.Set("address", address)
+	accountManager = wm
+	return nil
+}
+
+func prepareNode(cmd *cobra.Command, args []string) error {
+	n, err := node.New(getBlockChainConfig(cmd))
+	if err != nil {
+		return err
 	}
 
-	opts := config.Options{
-		Address: address,
-		NodeId:  nodeId,
-		Logger:  logger,
+	if err := n.Init(context.Background()); err != nil {
+		return err
 	}
 
-	opts.DbFilePath = getDbFilePath()
-	opts.WalletsFilePath = getWalletFilePath()
+	localNode = n
+	return nil
+}
+
+func getBlockChainConfig(cmd *cobra.Command) params.Options {
+	opts := params.Options{
+		Logger: logger,
+	}
+
+	opts.DbFilePath = getChainDbFilePath()
+	opts.WalletsFilePath = getWalletsDbFilePath()
+	opts.NodeFilePath = getNodeDbFilePath()
 
 	return opts
 }
@@ -57,9 +81,9 @@ func getBlockchainConfig(cmd *cobra.Command) config.Options {
 func writeOutput(cmd *cobra.Command, v interface{}) error {
 	outputFormat, _ := cmd.Flags().GetString("output")
 	if outputFormat == "json" {
-		return response.WriteJSON(os.Stdout, logger, v)
+		return resutil.WriteJSON(os.Stdout, logger, v)
 	} else {
-		return response.WriteYAML(os.Stdout, logger, v)
+		return resutil.WriteYAML(os.Stdout, logger, v)
 	}
 }
 
@@ -79,14 +103,13 @@ func addOutputFormatFlag(cmd *cobra.Command) {
 	cmd.Flags().StringP("output", "o", "yaml", "specify output format (yaml/json)")
 }
 
-func addAddressFlag(cmd *cobra.Command) {
-	cmd.Flags().StringP("address", "a", "", "Blockchain address")
-	cmd.MarkFlagRequired("address")
-	bindViperFlag(cmd, "address", "address")
+func addNetworkIdFlag(cmd *cobra.Command) {
+	cmd.Flags().String("network-id", params.MainNetworkId, "Chain network id")
+	bindViperFlag(cmd, "network-id", "network-id")
 }
 
-func addNodeIdFlag(cmd *cobra.Command) {
-	cmd.Flags().String("node-id", os.Getenv("NODE_ID"), "Blockchain node id")
-	cmd.MarkFlagRequired("node-id")
-	bindViperFlag(cmd, "node_id", "node-id")
+func addAddressFlag(cmd *cobra.Command) {
+	cmd.Flags().StringP("address", "a", "", "Specify wallet address")
+	cmd.MarkFlagRequired("address")
+	bindViperFlag(cmd, "address", "address")
 }

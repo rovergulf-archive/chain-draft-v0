@@ -4,15 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/rovergulf/rbn/core"
+	"github.com/rovergulf/rbn/client"
+	"github.com/rovergulf/rbn/proto"
 	"github.com/spf13/viper"
-	"net/http"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"time"
 )
 
-func (n *Node) sync(ctx context.Context) error {
-	n.doSync()
+func (n *Node) sync(ctx context.Context) {
+	n.doSync(ctx)
 
 	syncTimerDuration := viper.GetDuration("node.sync_interval")
 	ticker := time.NewTicker(syncTimerDuration * time.Second)
@@ -20,107 +21,123 @@ func (n *Node) sync(ctx context.Context) error {
 	for {
 		select {
 		case <-ticker.C:
-			n.doSync()
-
+			n.doSync(ctx)
 		case <-ctx.Done():
 			ticker.Stop()
 		}
 	}
 }
 
-func (n *Node) doSync() {
-	for _, peer := range n.knownPeers {
+func (n *Node) doSync(ctx context.Context) {
+
+	for _, peer := range n.knownPeers.peers {
 		if n.metadata.Ip == peer.Ip && n.metadata.Port == peer.Port {
+			n.logger.Debug("Removing itself from known peers mem cache")
+			n.knownPeers.DeletePeer(peer.TcpAddress())
 			continue
 		}
 
 		if peer.Ip == "" {
+			n.logger.Debug("Removing node with no IP Address from known peers mem cache")
+			n.knownPeers.DeletePeer(peer.TcpAddress())
 			continue
 		}
 
 		n.logger.Infof("Searching for new Peers and their Blocks and Peers: '%s'", peer.TcpAddress())
 
-		status, err := queryPeerStatus(peer)
-		if err != nil {
-			n.logger.Error(err)
-			n.logger.Infof("Peer '%s' was removed from KnownPeers", peer.TcpAddress())
-
-			if err := n.removePeer(peer); err != nil {
-				n.logger.Errorf("Unable to remove peer: %s", err)
-			}
-
+		n.logger.Debug("Join known peers...")
+		if err := n.joinKnownPeer(ctx, peer); err != nil {
+			n.logger.Error("Unable to join known peer: ", err)
 			continue
 		}
 
-		if err := n.joinKnownPeers(peer); err != nil {
-			n.logger.Error(err)
+		//n.logger.Debug("Sync state version...")
+		//if err := n.syncVersion(ctx); err != nil {
+		//	n.logger.Error("Unable to sync version: ", err)
+		//	continue
+		//}
+
+		//n.logger.Debug("Validate genesis...")
+		//if err := n.validateGenesis(ctx); err != nil {
+		//	n.logger.Error("Unable to validate genesis: ", err)
+		//	continue
+		//}
+
+		n.logger.Debug("Sync state account balances...")
+		if err := n.syncAccountBalances(ctx, n.metadata); err != nil {
+			n.logger.Error("Unable to sync version: ", err)
 			continue
 		}
 
-		if err = n.syncBlocks(peer, status); err != nil {
-			n.logger.Error(err)
-			continue
-		}
+		//n.logger.Debug("Sync blocks...")
+		//if err := n.syncBlocks(ctx); err != nil {
+		//	n.logger.Error("Unable to sync blocks: ", err)
+		//	continue
+		//}
 
-		if err := n.syncKnownPeers(status); err != nil {
-			n.logger.Error(err)
-			continue
-		}
-
-		//if err := n.syncPendingTXs(peer, status.PendingTXs); err != nil {
+		//n.logger.Debug("Sync pending transactions...")
+		//if err := n.syncPendingTXs(ctx); err != nil {
 		//	n.logger.Error(err)
 		//	continue
 		//}
 	}
 }
 
-func (n *Node) syncBlocks(peer PeerNode, status *StatusRes) error {
-	localBlockNumber, err := n.bc.GetBestHeight()
+func (n *Node) validateGenesis(ctx context.Context) error {
+	return fmt.Errorf("not implemented")
+}
 
-	// If the peer has no blocks, ignore it
-	if status.LastHash == "" {
+func (n *Node) joinKnownPeer(ctx context.Context, peer PeerNode) error {
+	if n.IsKnownPeer(peer) {
+		n.logger.Debugw("Peer already known",
+			"account", peer.Account, "addr", peer.TcpAddress())
 		return nil
 	}
 
-	// If the peer has less blocks than us, ignore it
-	if status.Number < localBlockNumber {
+	if !peer.connected {
+		// TODO client.NewClient
+		c, err := client.NewClient(ctx, n.logger, peer.TcpAddress())
+		if err != nil {
+			n.logger.Errorf("Unable to run peer client: %s", err)
+			return err
+		}
+
+		peer.connected = true
+		peer.client = c
+		n.knownPeers.AddPeer(peer.TcpAddress(), peer)
+
+		n.logger.Debugf("'%s' peer is healthy!", peer.TcpAddress())
+	} else {
 		return nil
 	}
 
-	// If it's the genesis block and we already synced it, ignore it
-	if status.Number == 0 && len(n.bc.LastHash) == 0 {
-		return nil
-	}
-
-	// Display found 1 new block if we sync the genesis block 0
-	newBlocksCount := status.Number - localBlockNumber
-	if localBlockNumber == 0 && status.Number == 0 {
-		newBlocksCount = 1
-	}
-	fmt.Printf("Found %d new blocks from Peer %s\n", newBlocksCount, peer.TcpAddress())
-
-	blocks, err := n.fetchBlocksFromPeer(peer, n.bc.LastHash)
+	data, err := json.Marshal(JoinPeerRequest{From: n.metadata})
 	if err != nil {
 		return err
 	}
 
-	for _, block := range blocks {
-		if err := n.bc.AddBlock(block); err != nil {
-			return err
+	if _, err := peer.client.MakeCall(ctx, proto.Command_Sync, proto.Entity_Peer, data); err != nil {
+		st, ok := status.FromError(err)
+		if ok {
+			if st.Code() == codes.AlreadyExists {
+				n.logger.Debugw("Peer already known",
+					"account", peer.Account, "addr", peer.TcpAddress())
+				return nil
+			}
 		}
-
-		n.proposedBlocks <- block
+		n.logger.Errorf("Failed to join peer: %s", err)
+		return err
 	}
 
 	return nil
 }
 
-func (n *Node) syncKnownPeers(status *StatusRes) error {
-	for _, statusPeer := range status.KnownPeers {
+func (n *Node) syncKnownPeers(ctx context.Context) error {
+	for _, statusPeer := range n.knownPeers.peers {
 		if !n.IsKnownPeer(statusPeer) {
-			fmt.Printf("Found new Peer %s\n", statusPeer.TcpAddress())
+			n.logger.Infof("Found new Peer %s", statusPeer.TcpAddress())
 
-			if err := n.addPeer(statusPeer); err != nil {
+			if err := n.addDbPeer(statusPeer); err != nil {
 				return err
 			}
 		}
@@ -129,110 +146,32 @@ func (n *Node) syncKnownPeers(status *StatusRes) error {
 	return nil
 }
 
-//func (n *Node) syncPendingTXs(peer PeerNode, txs []*core.Transaction) error {
-//	for _, tx := range txs {
-//		err := n.AddPendingTX(tx, peer)
-//		if err != nil {
-//			return err
-//		}
-//	}
-//
-//	return nil
-//}
+func (n *Node) syncVersion(ctx context.Context) error {
+	return fmt.Errorf("not implemented")
+}
 
-func (n *Node) joinKnownPeers(peer PeerNode) error {
-	if peer.connected {
-		return nil
-	}
+func (n *Node) syncPendingState(ctx context.Context, peer PeerNode) error {
+	return fmt.Errorf("not implemented")
+}
 
-	url := fmt.Sprintf(
-		"%s://%s%s?%s=%s&%s=%d",
-		peer.ApiProtocol(),
-		peer.TcpAddress(),
-		endpointAddPeer,
-		endpointAddPeerQueryKeyIP,
-		n.metadata.Ip,
-		endpointAddPeerQueryKeyPort,
-		n.metadata.Port,
-	)
+func (n *Node) syncBlockHeaders(ctx context.Context) error {
+	return fmt.Errorf("not implemented")
+}
 
-	res, err := http.Get(url)
-	if err != nil {
-		return err
-	}
+func (n *Node) syncBlocks(ctx context.Context) error {
+	return fmt.Errorf("not implemented")
+}
 
-	var addPeerRes AddPeerRes
-	decoder := json.NewDecoder(res.Body)
-	if err := decoder.Decode(&addPeerRes); err != nil {
-		return err
-	}
+func (n *Node) syncTransactions(ctx context.Context, peer PeerNode) error {
+	return fmt.Errorf("not implemented")
+}
 
-	if addPeerRes.Error != "" {
-		return fmt.Errorf(addPeerRes.Error)
-	}
-
-	knownPeer := n.knownPeers[peer.TcpAddress()]
-	knownPeer.connected = addPeerRes.Success
-
-	if err := n.addPeer(knownPeer); err != nil {
-		return err
-	}
-
-	if !addPeerRes.Success {
-		return fmt.Errorf("unable to join KnownPeers of '%s'", peer.TcpAddress())
-	}
+func (n *Node) syncAccountBalances(ctx context.Context, peer PeerNode) error {
+	//balances, err := n.bc.
 
 	return nil
 }
 
-func queryPeerStatus(peer PeerNode) (*StatusRes, error) {
-	url := fmt.Sprintf("%s://%s%s", peer.ApiProtocol(), peer.TcpAddress(), endpointStatus)
-	res, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf(res.Status)
-	}
-
-	var statusRes StatusRes
-	decoder := json.NewDecoder(res.Body)
-	if err := decoder.Decode(&statusRes); err != nil {
-		return nil, err
-	}
-
-	return &statusRes, nil
-}
-
-func (n *Node) fetchBlocksFromPeer(peer PeerNode, fromBlock common.Hash) ([]*core.Block, error) {
-	n.logger.Infof("Importing blocks from Peer %s...\n", peer.TcpAddress())
-
-	url := fmt.Sprintf(
-		"%s://%s%s?%s=%s",
-		peer.ApiProtocol(),
-		peer.TcpAddress(),
-		endpointSync,
-		endpointSyncQueryKeyFromBlock,
-		fmt.Sprintf("%x", fromBlock),
-	)
-
-	res, err := http.Get(url)
-	if err != nil {
-		n.logger.Errorf("Unable to decode sync res: %s", err)
-		return nil, err
-	}
-
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf(res.Status)
-	}
-
-	var syncRes SyncRes
-	decoder := json.NewDecoder(res.Body)
-	if err := decoder.Decode(&syncRes); err != nil {
-		n.logger.Errorf("Unable to decode sync res: %s", err)
-		return nil, err
-	}
-
-	return syncRes.Blocks, nil
+func (n *Node) syncKeystore(ctx context.Context, peer PeerNode) error {
+	return fmt.Errorf("not implemented")
 }

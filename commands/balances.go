@@ -3,7 +3,6 @@ package commands
 import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/rovergulf/rbn/core"
 	"github.com/spf13/cobra"
 )
 
@@ -16,30 +15,27 @@ var balancesCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(balancesCmd)
-	balancesCmd.AddCommand(balancesListCmd())
-	balancesCmd.AddCommand(balancesGetCmd())
 }
 
 // balancesListCmd represents the balances list command
 func balancesListCmd() *cobra.Command {
 	var balancesListCmd = &cobra.Command{
-		Use:   "list",
-		Short: "Lists all balances.",
+		Use:     "list",
+		Short:   "Lists all balances.",
+		PreRunE: prepareBlockChain,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			bc, err := core.ContinueBlockchain(getBlockchainConfig(cmd))
+			defer blockChain.Shutdown()
+
+			balances, err := blockChain.ListBalances()
 			if err != nil {
-				logger.Error("Unable to start blockchain: %s", err)
 				return err
 			}
-			defer bc.Shutdown()
 
-			return writeOutput(cmd, bc.Balances)
+			return writeOutput(cmd, balances)
 		},
 	}
 
 	addOutputFormatFlag(balancesListCmd)
-	addNodeIdFlag(balancesListCmd)
 
 	return balancesListCmd
 }
@@ -47,8 +43,9 @@ func balancesListCmd() *cobra.Command {
 // balancesGetCmd represents the balances get command
 func balancesGetCmd() *cobra.Command {
 	var balancesGetCmd = &cobra.Command{
-		Use:   "get",
-		Short: "Get blockchain address balance.",
+		Use:     "get",
+		Short:   "Get blockchain address balance.",
+		PreRunE: prepareBlockChain,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			address, _ := cmd.Flags().GetString("address")
 			if len(address) > 0 {
@@ -57,30 +54,12 @@ func balancesGetCmd() *cobra.Command {
 				}
 			}
 
-			bc, err := core.ContinueBlockchain(getBlockchainConfig(cmd))
-			if err != nil {
-				logger.Errorf("Unable to start blockchain: %s", err)
-				return err
-			}
-			defer bc.Shutdown()
+			defer blockChain.Shutdown()
 
-			balanceSet := core.Balances{
-				Blockchain: bc,
-			}
-
-			balance, err := balanceSet.GetBalance(common.HexToAddress(address))
+			balance, err := blockChain.GetBalance(common.HexToAddress(address))
 			if err != nil {
 				return err
 			}
-
-			//UTXOs, err := UTXOSet.FindUnspentTransactions(pubKeyHash)
-			//if err != nil {
-			//	return err
-			//}
-			//
-			//for _, out := range UTXOs {
-			//	balance += out.Value
-			//}
 
 			return writeOutput(cmd, map[string]interface{}{
 				"address": address,
@@ -90,7 +69,6 @@ func balancesGetCmd() *cobra.Command {
 	}
 
 	addAddressFlag(balancesGetCmd)
-	addNodeIdFlag(balancesGetCmd)
 
 	addOutputFormatFlag(balancesGetCmd)
 

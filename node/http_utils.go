@@ -1,12 +1,18 @@
 package node
 
 import (
+	"context"
+	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/opentracing/opentracing-go"
-	"github.com/rovergulf/rbn/core"
+	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/prom2json"
+	"github.com/rovergulf/rbn/params"
+	"github.com/rovergulf/rbn/pkg/resutil"
 	"go.uber.org/zap"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const (
@@ -39,9 +45,10 @@ var allowedMethods = []string{
 
 // httpServer represents mux.Router interceptor, to handle CORS requests
 type httpServer struct {
-	router *mux.Router
-	tracer opentracing.Tracer
-	logger *zap.SugaredLogger
+	router     *mux.Router
+	tracer     opentracing.Tracer
+	logger     *zap.SugaredLogger
+	httpServer http.Server
 }
 
 // ServeHTTP wraps http.Server ServeHTTP method to handle preflight requests
@@ -77,18 +84,100 @@ func (h *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.router.ServeHTTP(w, r.WithContext(ctx))
 }
 
-type StatusRes struct {
-	LastHash   string                    `json:"block_hash,omitempty" yaml:"last_hash,omitempty"`
-	Number     uint64                    `json:"block_number,omitempty" yaml:"number,omitempty"`
-	KnownPeers map[string]PeerNode       `json:"peers_known,omitempty" yaml:"known_peers,omitempty"`
-	PendingTXs map[string]*core.SignedTx `json:"pending_txs,omitempty" yaml:"pending_t_xs,omitempty"`
+func (n *Node) httpResponse(w http.ResponseWriter, i interface{}, statusCode ...int) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+	if len(statusCode) > 0 {
+		w.WriteHeader(statusCode[0])
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
+
+	if err := resutil.WriteJSON(w, n.logger, i); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf("Unable to write json response: %s", err)))
+	}
 }
 
-type SyncRes struct {
-	Blocks []*core.Block `json:"blocks" yaml:"blocks"`
+func (n *Node) WalkRoutes(w http.ResponseWriter, r *http.Request) {
+	var results []map[string]interface{}
+
+	err := n.httpHandler.router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
+		res := make(map[string]interface{})
+
+		pathTemplate, err := route.GetPathTemplate()
+		if err == nil {
+			//h.Logger.Debug("ROUTE: ", pathTemplate)
+			res["route"] = pathTemplate
+		}
+		pathRegexp, err := route.GetPathRegexp()
+		if err == nil {
+			//h.Logger.Debug("Path regexp: ", pathRegexp)
+			res["regexp"] = pathRegexp
+		}
+		queriesTemplates, err := route.GetQueriesTemplates()
+		if err == nil {
+			//h.Logger.Debug("Queries templates: ", strings.Join(queriesTemplates, ","))
+			res["queries_templates"] = strings.Join(queriesTemplates, ",")
+		}
+		queriesRegexps, err := route.GetQueriesRegexp()
+		if err == nil {
+			//h.Logger.Debug("Queries regexps: ", strings.Join(queriesRegexps, ","))
+			res["queries_regexps"] = strings.Join(queriesRegexps, ",")
+		}
+		methods, err := route.GetMethods()
+		if err == nil {
+			//h.Logger.Debug("Methods: ", strings.Join(methods, ","))
+			res["methods"] = methods
+		}
+
+		results = append(results, res)
+		return nil
+	})
+	if err != nil {
+		n.logger.Error(err)
+	}
+
+	n.httpResponse(w, results)
 }
 
-type AddPeerRes struct {
-	Success bool   `json:"success" yaml:"success"`
-	Error   string `json:"error,omitempty" yaml:"error,omitempty"`
+func (n *Node) healthCheck(w http.ResponseWriter, r *http.Request) {
+	n.httpResponse(w, map[string]interface{}{
+		"http_status": http.StatusOK,
+		"timestamp":   time.Now().Unix(),
+		"run_date":    params.RunDate.Format(time.RFC1123),
+		"node_status": "healthy",
+		"in_gamble":   n.inGenRace,
+	})
+}
+
+func (n *Node) DiscoverMetrics(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	metricsUrl := fmt.Sprintf("%s/metrics", n.metadata.HttpApiAddress())
+	req, err := http.Get(metricsUrl)
+	if err != nil {
+		n.logger.Errorf("Unable to send request to prometheus metrics: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		n.httpResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	mfChan := make(chan *dto.MetricFamily, 1024)
+
+	// Missing input means we are reading from an URL.
+	if err := prom2json.ParseReader(req.Body, mfChan); err != nil {
+		n.logger.Errorf("error reading metrics: %s", err)
+		n.httpResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var result []*prom2json.Family
+	for mf := range mfChan {
+		result = append(result, prom2json.NewFamily(mf))
+	}
+
+	n.httpResponse(w, result)
 }

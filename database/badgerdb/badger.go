@@ -20,6 +20,8 @@ func retry(dir string, originalOpts badger.Options) (*badger.DB, error) {
 
 func OpenDB(dir string, opts badger.Options) (*badger.DB, error) {
 	opts.Logger = nil
+	opts = opts.WithMetricsEnabled(true)
+	// TBD calculate available cache
 	if db, err := badger.Open(opts); err != nil {
 		if strings.Contains(err.Error(), "LOCK") {
 			if db, err := retry(dir, opts); err == nil {
