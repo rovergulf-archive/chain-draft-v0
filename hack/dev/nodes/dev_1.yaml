@@ -1,4 +1,5 @@
 http:
-  addr: 127.0.0.1:9469
+  port: 9469
 
-miner:
+node:
+  port: 9420

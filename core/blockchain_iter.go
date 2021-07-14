@@ -33,7 +33,8 @@ func (i *BlockChainIterator) Next() (*types.Block, error) {
 	var block *types.Block
 
 	if err := i.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(i.CurrentHash.Bytes())
+		key := blockDbPrefix(i.CurrentHash)
+		item, err := txn.Get(key)
 		if err != nil {
 			return err
 		}

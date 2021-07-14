@@ -68,8 +68,8 @@ func (n *Node) nodeInfo(w http.ResponseWriter, r *http.Request) {
 
 	n.httpResponse(w, map[string]interface{}{
 		"peer":        n.metadata,
-		"lash_hash":   lb.BlockHeader.Hash.Hex(),
-		"pending_txs": len(n.pendingTXs),
+		"lash_hash":   lb.BlockHeader.BlockHash.Hex(),
+		"pending_txs": n.pendingState.pendingTxLen(),
 		"peers":       len(n.knownPeers.peers),
 		"in_gen_race": n.inGenRace,
 		"db_size": map[string]int64{
@@ -152,7 +152,8 @@ func (n *Node) GetBalance(w http.ResponseWriter, r *http.Request) {
 }
 
 func (n *Node) txAdd(w http.ResponseWriter, r *http.Request) {
-	//ctx := r.Context()
+	ctx := r.Context()
+
 	var req TxAddRequest
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&req); err != nil {
@@ -195,7 +196,7 @@ func (n *Node) txAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	receipt, err := n.AddPendingTX(signedTx, n.metadata)
+	receipt, err := n.AddPendingTX(ctx, signedTx, n.metadata)
 	if err != nil {
 		n.logger.Errorf("Unable to add pending tx: %s", err)
 		n.httpResponse(w, err, http.StatusInternalServerError)
@@ -220,7 +221,7 @@ func (n *Node) txFind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := n.bc.FindTransaction(hash.Bytes())
+	tx, err := n.bc.FindTransaction(hash)
 	if err != nil {
 		n.httpResponse(w, err, http.StatusInternalServerError)
 		return
@@ -231,7 +232,7 @@ func (n *Node) txFind(w http.ResponseWriter, r *http.Request) {
 
 func (n *Node) ListBlocks(w http.ResponseWriter, r *http.Request) {
 	//ctx := r.Context()
-	blocks, err := n.bc.GetBlockHashes()
+	blocks, err := n.bc.SearchBlocks()
 	if err != nil {
 		n.httpResponse(w, err, http.StatusInternalServerError)
 		return

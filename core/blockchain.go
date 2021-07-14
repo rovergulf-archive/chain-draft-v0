@@ -63,7 +63,7 @@ func (bc *BlockChain) Run(ctx context.Context) error {
 // LoadChainState loads BlockChain state from database
 func (bc *BlockChain) LoadChainState(ctx context.Context) error {
 	return bc.db.View(func(txn *badger.Txn) error {
-		lh, err := txn.Get([]byte("lh"))
+		lh, err := txn.Get(lastHashKey)
 		if err != nil {
 			// is it ok??
 			if err == badger.ErrKeyNotFound {
@@ -76,7 +76,8 @@ func (bc *BlockChain) LoadChainState(ctx context.Context) error {
 		return lh.Value(func(val []byte) error {
 			bc.LastHash = common.BytesToHash(val)
 
-			lastBlockValue, err := txn.Get(bc.LastHash.Bytes())
+			key := blockDbPrefix(bc.LastHash)
+			lastBlockValue, err := txn.Get(key)
 			if err != nil {
 				bc.logger.Errorf("Unable to get last block value: %s", err)
 				return err
@@ -90,7 +91,7 @@ func (bc *BlockChain) LoadChainState(ctx context.Context) error {
 					return err
 				}
 
-				bc.LastHash = b.BlockHeader.Hash
+				bc.LastHash = b.BlockHeader.BlockHash
 				bc.ChainLength = b.Number + 1
 				return nil
 			})

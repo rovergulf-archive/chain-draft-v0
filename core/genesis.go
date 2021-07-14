@@ -8,6 +8,8 @@ import (
 	"github.com/rovergulf/rbn/params"
 )
 
+// Genesis represents BlockChain initialization state
+//and provides its root state for new peer initialization
 type Genesis struct {
 	ChainId     string         `json:"chain_id" yaml:"chain_id"`
 	GenesisTime int64          `json:"genesis_time" yaml:"genesis_time"`
@@ -28,9 +30,9 @@ func DevNetGenesis() *Genesis {
 		GenesisTime: 1625422671,
 		NetherPrice: 21000,
 		Nonce:       0,
-		Coinbase:    common.Address{},
-		Symbol:      "Nether", // is an acronym for Network, Etherium and Rovergulf
-		Units:       "Wei",    // in favor of Etherium native denomination
+		Coinbase:    common.HexToAddress("0x01"),
+		Symbol:      "Nether",
+		Units:       "Wei", // in favor of Etherium native denomination
 		ParentHash:  common.Hash{},
 		Alloc:       developerNetAlloc(),
 		ExtraData:   []byte{},
@@ -70,7 +72,7 @@ func (g *Genesis) Deserialize(data []byte) error {
 }
 
 func (g *Genesis) ToBlock() (*types.Block, error) {
-	var txs []types.SignedTx
+	var txs []*types.SignedTx
 
 	for addr := range g.Alloc {
 		alloc := g.Alloc[addr]
@@ -80,7 +82,7 @@ func (g *Genesis) ToBlock() (*types.Block, error) {
 		}
 		tx.Time = g.GenesisTime
 
-		txs = append(txs, types.SignedTx{Transaction: tx})
+		txs = append(txs, &types.SignedTx{Transaction: tx})
 	}
 
 	header := types.BlockHeader{
@@ -95,7 +97,13 @@ func (g *Genesis) ToBlock() (*types.Block, error) {
 	if err != nil {
 		return nil, err
 	}
-	b.BlockHeader.Hash = common.BytesToHash(hash)
+	b.BlockHeader.BlockHash = common.BytesToHash(hash)
+
+	txHash, err := b.HashTransactions()
+	if err != nil {
+		return nil, err
+	}
+	b.TxHash = common.BytesToHash(txHash)
 
 	return b, nil
 }

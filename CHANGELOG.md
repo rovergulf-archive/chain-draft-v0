@@ -4,16 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
-## 7 Jul 2021
+## 14 Jul 2021
 
 ### Added
-- sync known peers (to be tested)
+- Reward transactions handle
 
 ### Changed
 
 ### Fixed
 
 ### Removed
+
+
+## 13 Jul 2021
+
+### Added
+- `traceutil` package parent context option wrapper func
+
+
+## 9 Jul 2021
+
+### Added
+- sync known peers (to be tested)
+- prefixes for all kv database keys in BlockChain, also added wrapper functions
+- wallets manager address existsing method
+- wallet lock status method which returns "Un/Locked" string
 
 
 ## 7 Jul 2021

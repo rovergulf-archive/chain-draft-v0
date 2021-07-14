@@ -54,6 +54,9 @@ func (m *Manager) findAccountKey(address common.Address) ([]byte, error) {
 	if err := m.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(address.Bytes())
 		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				return ErrAccountNotExists
+			}
 			return err
 		}
 

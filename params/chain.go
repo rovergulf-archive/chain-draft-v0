@@ -6,6 +6,8 @@ const (
 )
 
 const (
+	TxPerBlockLimit int = 2560
+
 	GenesisNetherLimit uint64 = 42e5 // Genesis block nether limit
 
 	NetherLimit uint64 = 48e3 // Minimal nether fee limit may ever be.
@@ -20,7 +22,14 @@ const (
 	NetStoragePrice uint64 = 4196 // per data len/1024
 )
 
+// tx rewards
 const (
 	TxReward       uint64 = 64 // Reward multiplier per block transaction handled
 	HardwareReward uint64 = 32 // Reward multiplier for network membership
+)
+
+// achievements
+const (
+	AchievementForYearOfPeering   = 42e7
+	AchievementForE2SwapsVerified = 42e6 // note that this achievement works only for addressed cluster
 )

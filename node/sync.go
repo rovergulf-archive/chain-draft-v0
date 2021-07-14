@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/rovergulf/rbn/client"
+	"github.com/rovergulf/rbn/proto"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -28,6 +29,7 @@ func (n *Node) sync(ctx context.Context) {
 }
 
 func (n *Node) doSync(ctx context.Context) {
+
 	for _, peer := range n.knownPeers.peers {
 		if n.metadata.Ip == peer.Ip && n.metadata.Port == peer.Port {
 			n.logger.Debug("Removing itself from known peers mem cache")
@@ -49,29 +51,35 @@ func (n *Node) doSync(ctx context.Context) {
 			continue
 		}
 
-		n.logger.Debug("Sync state version...")
-		if err := n.syncVersion(ctx); err != nil {
+		//n.logger.Debug("Sync state version...")
+		//if err := n.syncVersion(ctx); err != nil {
+		//	n.logger.Error("Unable to sync version: ", err)
+		//	continue
+		//}
+
+		//n.logger.Debug("Validate genesis...")
+		//if err := n.validateGenesis(ctx); err != nil {
+		//	n.logger.Error("Unable to validate genesis: ", err)
+		//	continue
+		//}
+
+		n.logger.Debug("Sync state account balances...")
+		if err := n.syncAccountBalances(ctx, n.metadata); err != nil {
 			n.logger.Error("Unable to sync version: ", err)
 			continue
 		}
 
-		n.logger.Debug("Validate genesis...")
-		if err := n.validateGenesis(ctx); err != nil {
-			n.logger.Error("Unable to validate genesis: ", err)
-			continue
-		}
+		//n.logger.Debug("Sync blocks...")
+		//if err := n.syncBlocks(ctx); err != nil {
+		//	n.logger.Error("Unable to sync blocks: ", err)
+		//	continue
+		//}
 
-		n.logger.Debug("Sync blocks...")
-		if err := n.syncBlocks(ctx); err != nil {
-			n.logger.Error("Unable to sync blocks: ", err)
-			continue
-		}
-
-		n.logger.Debug("Sync pending transactions...")
-		if err := n.syncPendingTXs(ctx); err != nil {
-			n.logger.Error(err)
-			continue
-		}
+		//n.logger.Debug("Sync pending transactions...")
+		//if err := n.syncPendingTXs(ctx); err != nil {
+		//	n.logger.Error(err)
+		//	continue
+		//}
 	}
 }
 
@@ -80,6 +88,12 @@ func (n *Node) validateGenesis(ctx context.Context) error {
 }
 
 func (n *Node) joinKnownPeer(ctx context.Context, peer PeerNode) error {
+	if n.IsKnownPeer(peer) {
+		n.logger.Debugw("Peer already known",
+			"account", peer.Account, "addr", peer.TcpAddress())
+		return nil
+	}
+
 	if !peer.connected {
 		// TODO client.NewClient
 		c, err := client.NewClient(ctx, n.logger, peer.TcpAddress())
@@ -93,11 +107,7 @@ func (n *Node) joinKnownPeer(ctx context.Context, peer PeerNode) error {
 		n.knownPeers.AddPeer(peer.TcpAddress(), peer)
 
 		n.logger.Debugf("'%s' peer is healthy!", peer.TcpAddress())
-	}
-
-	if n.IsKnownPeer(peer) {
-		n.logger.Debugw("Peer already known",
-			"account", peer.Account, "addr", peer.TcpAddress())
+	} else {
 		return nil
 	}
 
@@ -106,7 +116,7 @@ func (n *Node) joinKnownPeer(ctx context.Context, peer PeerNode) error {
 		return err
 	}
 
-	if _, err := peer.client.JoinKnownPeer(ctx, data); err != nil {
+	if _, err := peer.client.MakeCall(ctx, proto.Command_Sync, proto.Entity_Peer, data); err != nil {
 		st, ok := status.FromError(err)
 		if ok {
 			if st.Code() == codes.AlreadyExists {
@@ -140,16 +150,26 @@ func (n *Node) syncVersion(ctx context.Context) error {
 	return fmt.Errorf("not implemented")
 }
 
+func (n *Node) syncPendingState(ctx context.Context, peer PeerNode) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (n *Node) syncBlockHeaders(ctx context.Context) error {
+	return fmt.Errorf("not implemented")
+}
+
 func (n *Node) syncBlocks(ctx context.Context) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (n *Node) syncPendingTXs(ctx context.Context) error {
+func (n *Node) syncTransactions(ctx context.Context, peer PeerNode) error {
 	return fmt.Errorf("not implemented")
 }
 
 func (n *Node) syncAccountBalances(ctx context.Context, peer PeerNode) error {
-	return fmt.Errorf("not implemented")
+	//balances, err := n.bc.
+
+	return nil
 }
 
 func (n *Node) syncKeystore(ctx context.Context, peer PeerNode) error {

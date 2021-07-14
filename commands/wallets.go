@@ -60,8 +60,9 @@ func walletsListCmd() *cobra.Command {
 
 func walletsPrintPrivKeyCmd() *cobra.Command {
 	var walletsPrintPrivKeyCmd = &cobra.Command{
-		Use:   "print-pk",
-		Short: "Unlocks keystore file and prints the Private + Public keys.",
+		Use:     "print-pk",
+		Short:   "Unlocks keystore file and prints the Private + Public keys.",
+		PreRunE: prepareWalletsManager,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			defer accountManager.Shutdown()
 
@@ -148,8 +149,9 @@ func walletsNewCmd() *cobra.Command {
 
 func walletsUpdateAuthCmd() *cobra.Command {
 	var walletsNewCmd = &cobra.Command{
-		Use:   "update",
-		Short: "Change wallet passphrase",
+		Use:     "update",
+		Short:   "Change wallet passphrase",
+		PreRunE: prepareWalletsManager,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			defer accountManager.Shutdown()
 

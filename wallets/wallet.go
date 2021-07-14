@@ -48,7 +48,7 @@ func (w *Wallet) Deserialize(data []byte) error {
 
 func (w *Wallet) SignTx(tx *types.Transaction) (*types.SignedTx, error) {
 	if w.key == nil {
-		return nil, fmt.Errorf("wallet is locked")
+		return nil, ErrAccountIsLocked
 	}
 
 	rawTx, err := tx.Serialize()

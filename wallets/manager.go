@@ -1,6 +1,7 @@
 package wallets
 
 import (
+	"errors"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/rovergulf/rbn/database/badgerdb"
 	"github.com/rovergulf/rbn/params"
@@ -9,6 +10,12 @@ import (
 )
 
 const DbWalletFile = "wallets.db"
+
+var (
+	ErrAccountNotExists = errors.New("account not exists")
+	ErrInvalidAuth      = errors.New("invalid authentication code")
+	ErrAccountIsLocked  = errors.New("account is locked")
+)
 
 type Manager struct {
 	db     *badger.DB

@@ -6,73 +6,137 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/opentracing/opentracing-go"
+	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/core/types"
+	"github.com/rovergulf/rbn/params"
+	"github.com/rovergulf/rbn/wallets"
 	"time"
 )
 
-func (n *Node) generateBlock(ctx context.Context) error {
-	if len(n.pendingTXs) == 0 {
-		return fmt.Errorf("no transactions available")
+var (
+	ErrNoTxAvailable = fmt.Errorf("no transactions available")
+)
+
+func (n *Node) generateBlock(ctx context.Context) (*types.Block, error) {
+	if n.tracer != nil {
+		span := n.tracer.StartSpan("generate_block")
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
 	}
 
-	var txs []types.SignedTx
-
-	for i := range n.pendingTXs {
-		tx := n.pendingTXs[i]
-		txs = append(txs, tx)
+	if n.pendingState.pendingTxLen() == 0 {
+		return nil, ErrNoTxAvailable
 	}
+
+	txs := n.pendingState.getTxsAsArray(params.TxPerBlockLimit)
 
 	lb, err := n.bc.GetBlock(n.bc.LastHash)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	header := types.BlockHeader{
-		PrevHash:  lb.BlockHeader.Hash,
+		Root:      lb.Root,
+		PrevHash:  lb.BlockHash,
 		Number:    lb.Number + 1,
 		Timestamp: time.Now().Unix(),
 		Coinbase:  n.account.Address(),
 	}
 
-	b := types.NewBlock(header, txs)
-	hash, err := b.Hash()
-	if err != nil {
-		return err
-	}
-	b.BlockHeader.Hash = common.BytesToHash(hash)
-
-	var receipts []*types.Receipt
-	var txHashes, receiptsHashes [][]byte
-	for _, tx := range b.Transactions {
-		hash, err := tx.Hash()
+	if core.IsHashEmpty(header.Root) {
+		gb, err := n.bc.GetGenesisBlock(ctx)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		txHashes = append(txHashes, hash)
+		header.Root = gb.BlockHash
+	}
+
+	b := types.NewBlock(header, txs)
+
+	var txHashes [][]byte
+	for _, tx := range b.Transactions {
+		txHash, err := tx.Hash()
+		if err != nil {
+			return nil, err
+		}
+		txHashes = append(txHashes, txHash)
 		b.NetherUsed += tx.Nether
 	}
+
+	rewardTxs, err := n.genRewardTxs(b)
+	if err != nil {
+		return nil, err
+	}
+	b.Transactions = append(b.Transactions, rewardTxs...)
+	txs = append(txs, rewardTxs...)
+
 	b.TxHash = sha256.Sum256(bytes.Join(txHashes, []byte{}))
 
-	for _, rcp := range receipts {
-		hash, err := rcp.Hash()
-		if err != nil {
-			return err
-		}
-		receiptsHashes = append(receiptsHashes, hash)
+	blockHash, err := b.Hash()
+	if err != nil {
+		return nil, err
 	}
-	b.ReceiptHash = sha256.Sum256(bytes.Join(receiptsHashes, []byte{}))
+	b.BlockHash = common.BytesToHash(blockHash)
+
+	n.removeAppliedPendingTXs(ctx, b)
 
 	if err := n.bc.AddBlock(b); err != nil {
-		return err
+		return nil, err
 	}
 
-	n.removeAppliedPendingTXs(b)
+	if err := n.bc.ApplyBlock(ctx, b); err != nil {
+		return nil, err
+	}
 
-	return nil
+	return b, nil
 }
 
-func (n *Node) removeAppliedPendingTXs(block *types.Block) {
-	if len(block.Transactions) > 0 && len(n.pendingTXs) > 0 {
+func (n *Node) genRewardTxs(b *types.Block) ([]*types.SignedTx, error) {
+	var txs []*types.SignedTx
+
+	peers := n.knownPeers.GetPeers()
+	if len(peers) == 0 {
+		peers[n.metadata.TcpAddress()] = n.metadata
+	}
+
+	peersAward := b.NetherUsed / uint64(len(peers))
+
+	perPeer := peersAward / uint64(len(peers))
+
+	for addr := range peers {
+		peer := peers[addr]
+
+		amount := perPeer
+		if peer.Account == b.Coinbase {
+			amount += params.NetherLimit
+		}
+
+		tx, err := types.NewTransaction(common.HexToAddress(""), peer.Account, amount, 0, types.TxRewardData)
+		if err != nil {
+			return nil, err
+		}
+
+		signedTx, err := n.account.SignTx(&tx)
+		if err != nil {
+			return nil, err
+		}
+
+		txs = append(txs, signedTx)
+	}
+
+	return txs, nil
+}
+
+func (n *Node) removeAppliedPendingTXs(ctx context.Context, block *types.Block) {
+	if n.tracer != nil {
+		span := n.tracer.StartSpan("add_pending_tx")
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
+
+	pendingTxLen := n.pendingState.pendingTxLen()
+	if len(block.Transactions) > 0 && pendingTxLen > 0 {
 		n.logger.Info("Updating in-memory Pending TXs Pool:")
 	}
 
@@ -83,16 +147,21 @@ func (n *Node) removeAppliedPendingTXs(block *types.Block) {
 			continue
 		}
 
-		hash := common.BytesToHash(txHash)
-		if _, exists := n.pendingTXs[hash]; exists {
-			n.logger.Infof("Archiving mined TX: %s", hash)
-
-			delete(n.pendingTXs, hash)
-		}
+		n.pendingState.removeTx(common.BytesToHash(txHash))
 	}
 }
 
-func (n *Node) AddPendingTX(tx types.SignedTx, peer PeerNode) (*types.Receipt, error) {
+func (n *Node) AddPendingTX(ctx context.Context, tx types.SignedTx, peer PeerNode) (*types.Receipt, error) {
+	if n.tracer != nil {
+		span := n.tracer.StartSpan("add_pending_tx")
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
+
+	if tx.IsReward() {
+		fmt.Println("\t-_-\treward tx")
+	}
+
 	ok, err := tx.IsAuthentic()
 	if err != nil {
 		return nil, err
@@ -103,6 +172,19 @@ func (n *Node) AddPendingTX(tx types.SignedTx, peer PeerNode) (*types.Receipt, e
 		return nil, fmt.Errorf("wrong TX. Sender '%s' is forged", tx.From)
 	}
 
+	balance, ok := n.pendingState.getBalance(tx.From)
+	if !ok {
+		accountBalance, err := n.bc.GetBalance(tx.From)
+		if err != nil {
+			return nil, err
+		} else {
+			if err := n.pendingState.addBalance(tx.From, accountBalance); err != nil {
+				return nil, err
+			}
+			balance = accountBalance
+		}
+	}
+
 	txHash, err := tx.Transaction.Hash()
 	if err != nil {
 		return nil, err
@@ -110,16 +192,43 @@ func (n *Node) AddPendingTX(tx types.SignedTx, peer PeerNode) (*types.Receipt, e
 
 	hash := common.BytesToHash(txHash)
 
-	if err := n.bc.SaveTx(hash, tx); err != nil {
-		return nil, err
+	receipt := &types.Receipt{
+		Addr:        tx.From,
+		Status:      0,
+		Balance:     balance.Balance - tx.Cost(),
+		NetherUsed:  tx.Nether,
+		NetherPrice: tx.NetherPrice,
+		TxHash:      hash,
+		TxIndex:     0,
 	}
 
-	receipt, err := n.bc.ApplyTx(hash, tx)
-	if err != nil {
+	if err := n.pendingState.addTx(hash, &tx); err != nil {
 		return nil, err
 	}
-
-	n.pendingTXs[hash] = tx
 
 	return receipt, nil
+}
+
+// checks if there is a matched key in a wallet store, and creates chain balance if it does not exists yet
+func (n *Node) checkBalanceExistence(ctx context.Context, addr common.Address) (*types.Balance, error) {
+	balance, err := n.bc.GetBalance(addr)
+	if err != nil {
+		if err == core.ErrBalanceNotExists {
+			if err := n.wm.Exists(ctx, addr); err != nil {
+				if err != wallets.ErrAccountNotExists {
+					n.logger.Errorf("Unable to check account existence: %s", err)
+				}
+				return nil, err
+			} else {
+				if b, err := n.bc.NewBalance(addr, 0); err != nil {
+					return nil, err
+				} else {
+					return b, nil
+				}
+			}
+		}
+		return nil, err
+	}
+
+	return balance, nil
 }

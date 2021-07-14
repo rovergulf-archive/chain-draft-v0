@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/console/prompt"
 	"github.com/rovergulf/rbn/client"
 	"github.com/rovergulf/rbn/node"
+	"github.com/rovergulf/rbn/proto"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -41,7 +42,7 @@ func txGetCmd() *cobra.Command {
 				return err
 			}
 
-			tx, err := blockChain.FindTransaction([]byte(id))
+			tx, err := blockChain.FindTransaction(common.HexToHash(id))
 			if err != nil {
 				return err
 			}
@@ -116,7 +117,7 @@ func txSendCmd() *cobra.Command {
 				return err
 			}
 
-			res, err := c.TxAdd(ctx, callData)
+			res, err := c.MakeCall(ctx, proto.Command_Add, proto.Entity_Transaction, callData)
 			if err != nil {
 				return err
 			}

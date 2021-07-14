@@ -1,20 +1,17 @@
 package core
 
 import (
-	"fmt"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rovergulf/rbn/core/types"
 )
-
-var ()
 
 func (bc *BlockChain) ListTransactions() ([]types.SignedTx, error) {
 	var txs []types.SignedTx
 
 	if err := bc.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
-		opts.Prefix = txPrefix
+		opts.Prefix = txsPrefix
 		it := txn.NewIterator(opts)
 		defer it.Close()
 		for it.Rewind(); it.Valid(); it.Next() {
@@ -38,13 +35,16 @@ func (bc *BlockChain) ListTransactions() ([]types.SignedTx, error) {
 	return txs, nil
 }
 
-func (bc *BlockChain) FindTransaction(txId []byte) (*types.SignedTx, error) {
+func (bc *BlockChain) FindTransaction(txHash common.Hash) (*types.SignedTx, error) {
 	var tx types.SignedTx
 
 	if err := bc.db.View(func(txn *badger.Txn) error {
-		key := append(txPrefix, txId...)
+		key := txDbPrefix(txHash)
 		item, err := txn.Get(key)
 		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				return ErrTxNotExists
+			}
 			return err
 		}
 
@@ -64,61 +64,8 @@ func (bc *BlockChain) SaveTx(txHash common.Hash, tx types.SignedTx) error {
 		return err
 	}
 
-	key := append(txPrefix, txHash.Bytes()...)
+	key := txDbPrefix(txHash)
 	return bc.db.Update(func(txn *badger.Txn) error {
 		return txn.Set(key, encodedTx)
-	})
-}
-
-func (bc *BlockChain) ApplyTx(txHash common.Hash, tx types.SignedTx) (*types.Receipt, error) {
-	fromAddr, err := bc.GetBalance(tx.From)
-	if err != nil {
-		bc.logger.Errorf("Unable to get sender balance: %s", err)
-		return nil, err
-	}
-
-	toAddr, err := bc.GetBalance(tx.To)
-	if err != nil {
-		bc.logger.Errorf("Unable to get recipient balance: %s", err)
-		return nil, err
-	}
-
-	if tx.Cost() > fromAddr.Balance {
-		return nil, fmt.Errorf("wrong TX. Sender '%s' balance is %d TBB. Tx cost is %d TBB",
-			tx.From.String(), fromAddr.Balance, tx.Cost())
-	}
-
-	fromAddr.Balance -= tx.Cost()
-	toAddr.Balance += tx.Value
-
-	fromAddr.Nonce = tx.Nonce
-	toAddr.Nonce++
-
-	from, err := fromAddr.Serialize()
-	if err != nil {
-		return nil, err
-	}
-
-	to, err := toAddr.Serialize()
-	if err != nil {
-		return nil, err
-	}
-
-	receipt := &types.Receipt{
-		Addr:        fromAddr.Address,
-		Balance:     fromAddr.Balance,
-		NetherUsed:  tx.Nether,
-		NetherPrice: tx.NetherPrice,
-		TxHash:      txHash,
-	}
-
-	return receipt, bc.db.Update(func(txn *badger.Txn) error {
-		senderKey := append(balancesPrefix, fromAddr.Address.Bytes()...)
-		if err := txn.Set(senderKey, from); err != nil {
-			return err
-		}
-
-		recipientKey := append(balancesPrefix, toAddr.Address.Bytes()...)
-		return txn.Set(recipientKey, to)
 	})
 }

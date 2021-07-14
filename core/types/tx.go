@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	txRewardData = []byte("Treasurer reward")
+	TxRewardData = []byte("Treasurer reward")
 )
 
 type Transactions []Transaction
@@ -83,10 +83,14 @@ func (tx *Transaction) Deserialize(data []byte) error {
 	return decoder.Decode(tx)
 }
 
-func (tx *Transaction) IsReward() bool {
-	return bytes.Compare(tx.Data, txRewardData) == 0
-}
-
 func (tx *Transaction) Cost() uint64 {
 	return tx.Value + tx.Nether
+}
+
+func (tx *Transaction) AppendData(data []byte) {
+	tx.Data = append(tx.Data, data...)
+}
+
+func (tx *Transaction) IsReward() bool {
+	return bytes.Compare(tx.Data, TxRewardData) == 0
 }

@@ -167,7 +167,7 @@ func setConfigDefaults() {
 	viper.SetDefault("node.addr", "127.0.0.1")
 	viper.SetDefault("node.port", 9420)
 	viper.SetDefault("node.sync_mode", node.SyncModeDefault)
-	viper.SetDefault("node.sync_interval", 15)
+	viper.SetDefault("node.sync_interval", 5)
 	viper.SetDefault("node.cache_dir", "")
 
 	viper.SetDefault("http.disabled", false)

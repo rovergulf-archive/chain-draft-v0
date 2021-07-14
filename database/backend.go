@@ -1,8 +1,10 @@
 package database
 
+import "context"
+
 const (
-	Badger = "badger"
-	Dgraph = "dgraph"
+	Badger = "badger" // idk, pretty sure etcd, bbolt or consul would fit as well
+	Dgraph = "dgraph" // would research and implement: https://github.com/rovergulf/rbn/issues/28
 )
 
 // Config is used to configure and run RBN database backend
@@ -15,15 +17,27 @@ type Config struct {
 	Addr string `json:"addr" yaml:"addr"`
 }
 
-type DbStats struct {
-	Size  int64                  `json:"size,omitempty" yaml:"size,omitempty"`
-	Sizes map[string]interface{} `json:"sizes,omitempty" yaml:"sizes,omitempty"`
+// lifecycle handles start/stop signals for db connection/file read
+type lifecycle interface {
+	//Run() error
+	Shutdown()
+}
+
+type KvStorage interface {
+	Get(ctx context.Context, key []byte) ([]byte, error)
+	Put(ctx context.Context, key []byte, data []byte) error
+	Delete(ctx context.Context, key []byte) error
+	List(ctx context.Context, prefix []byte) ([][]byte, error)
+}
+
+type txFunc func(txn KvStorage) error
+
+type kvTx interface {
+	View(ctx context.Context, txFunc txFunc) error
+	Update(ctx context.Context, txFunc txFunc) error
 }
 
 type Backend interface {
 	lifecycle
-}
-
-type lifecycle interface {
-	Shutdown()
+	KvStorage
 }

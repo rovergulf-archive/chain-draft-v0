@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/dgraph-io/badger/v3"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/mux"
 	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/core/types"
@@ -52,7 +51,7 @@ type Node struct {
 
 	knownPeers knownPeers
 
-	pendingTXs map[common.Hash]types.SignedTx
+	pendingState *pendingState
 
 	newSyncBlocks chan types.Block
 	newSyncTXs    chan types.SignedTx
@@ -66,8 +65,6 @@ type Node struct {
 
 // New creates and returns new node if blockchain available
 func New(opts params.Options) (*Node, error) {
-	defaultNode := defaultPeer()
-
 	n := &Node{
 		httpHandler: httpServer{
 			router: mux.NewRouter(),
@@ -78,12 +75,10 @@ func New(opts params.Options) (*Node, error) {
 		bc:     nil,
 		logger: opts.Logger,
 		knownPeers: knownPeers{
-			peers: map[string]PeerNode{
-				defaultNode.TcpAddress(): defaultNode,
-			},
-			lock: new(sync.RWMutex),
+			peers: makeDefaultTrustedPeers(),
+			lock:  new(sync.RWMutex),
 		},
-		pendingTXs:    make(map[common.Hash]types.SignedTx),
+		pendingState:  newPendingState(),
 		newSyncTXs:    make(chan types.SignedTx),
 		newSyncBlocks: make(chan types.Block),
 		//Lock:       new(sync.RWMutex),
@@ -144,6 +139,10 @@ func (n *Node) Init(ctx context.Context) error {
 	n.logger.Debugf("Node account: %s", n.account.Address())
 
 	n.setNetworkMetadata(ctx)
+
+	if err := n.syncKeystoreBalances(ctx); err != nil {
+		n.logger.Errorf("Unable to sync keystore balances with chain state: %s", err)
+	}
 
 	return nil
 }
@@ -243,13 +242,6 @@ func (n *Node) Shutdown() {
 	os.Exit(0)
 }
 
-func (n *Node) IsKnownPeer(peer PeerNode) bool {
-	n.knownPeers.lock.RLock()
-	defer n.knownPeers.lock.RUnlock()
-	_, ok := n.knownPeers.peers[peer.Account.Hex()]
-	return ok
-}
-
 func (n *Node) race(ctx context.Context) {
 	var miningCtx context.Context
 	var stopCurrentRace context.CancelFunc
@@ -260,28 +252,32 @@ func (n *Node) race(ctx context.Context) {
 		select {
 		case <-ticker.C:
 			go func() {
-				if len(n.pendingTXs) > 0 && !n.inGenRace {
-					n.logger.Debugw("There is transactions available", "txs", len(n.pendingTXs))
+				pendingTxs := n.pendingState.pendingTxLen()
+				if pendingTxs > 0 && !n.inGenRace {
+					n.logger.Debugw("There is transactions available", "txs", pendingTxs)
 					n.inGenRace = true
-
 					miningCtx, stopCurrentRace = context.WithCancel(ctx)
-					if err := n.generateBlock(miningCtx); err != nil {
+
+					block, err := n.generateBlock(miningCtx)
+					if err != nil {
 						n.logger.Errorf("Failed to generate new block: %s", err)
 					}
 
 					n.inGenRace = false
+
+					n.logger.Debugf("block generated: %s", block.BlockHeader.BlockHash)
 				}
 			}()
 		case tx := <-n.newSyncTXs:
 			n.logger.Debugw("New pending tx appeared", "is_racing", n.inGenRace)
-			if _, err := n.AddPendingTX(tx, n.metadata); err != nil {
+			if _, err := n.AddPendingTX(ctx, tx, n.metadata); err != nil {
 				n.logger.Errorf("Unable to add pending tx: %s", err)
 			}
 		case block, _ := <-n.newSyncBlocks:
 			n.logger.Debugw("Proposed block appeared", "is_racing", n.inGenRace)
 			if n.inGenRace {
-				n.logger.Warnf("Another peer has won the game '%s'! :(", block.BlockHeader.Hash.Hex())
-				n.removeAppliedPendingTXs(&block)
+				n.logger.Warnf("Another peer has won the game '%s'! :(", block.BlockHeader.BlockHash.Hex())
+				n.removeAppliedPendingTXs(ctx, &block)
 				stopCurrentRace()
 			}
 

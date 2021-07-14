@@ -1,7 +1,6 @@
 package core
 
 import (
-	"fmt"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rovergulf/rbn/core/types"
@@ -10,10 +9,13 @@ import (
 func (bc *BlockChain) GetBalance(addr common.Address) (*types.Balance, error) {
 	var balance types.Balance
 
-	key := append(balancesPrefix, addr.Bytes()...)
+	key := balanceDbPrefix(addr)
 	if err := bc.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(key)
 		if err != nil {
+			if err == badger.ErrKeyNotFound {
+				return ErrBalanceNotExists
+			}
 			return err
 		}
 
@@ -56,18 +58,6 @@ func (bc *BlockChain) ListBalances() ([]*types.Balance, error) {
 	return balances, nil
 }
 
-func (bc *BlockChain) GetNextAccountNonce(addr common.Address) uint64 {
-	b, err := bc.GetBalance(addr)
-	if err != nil {
-		if err != badger.ErrKeyNotFound {
-			bc.logger.Errorw("Unable to get balance: %s", err)
-		}
-		return 0
-	}
-
-	return b.Nonce + 1
-}
-
 func (bc *BlockChain) NewBalance(addr common.Address, value uint64) (*types.Balance, error) {
 	balance := &types.Balance{
 		Address: addr,
@@ -80,10 +70,10 @@ func (bc *BlockChain) NewBalance(addr common.Address, value uint64) (*types.Bala
 		return nil, err
 	}
 
-	key := append(balancesPrefix, addr.Bytes()...)
+	key := balanceDbPrefix(addr)
 	if err := bc.db.Update(func(txn *badger.Txn) error {
 		if _, err := txn.Get(key); err == nil {
-			return fmt.Errorf("'%s' already exists", addr)
+			return ErrBalanceAlreadyExists
 		}
 
 		return txn.Set(key, data)
@@ -92,4 +82,16 @@ func (bc *BlockChain) NewBalance(addr common.Address, value uint64) (*types.Bala
 	}
 
 	return balance, nil
+}
+
+func (bc *BlockChain) GetNextAccountNonce(addr common.Address) uint64 {
+	b, err := bc.GetBalance(addr)
+	if err != nil {
+		if err != badger.ErrKeyNotFound {
+			bc.logger.Errorw("Unable to get balance: %s", err)
+		}
+		return 0
+	}
+
+	return b.Nonce + 1
 }

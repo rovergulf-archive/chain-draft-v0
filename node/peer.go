@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rovergulf/rbn/client"
+	"github.com/rovergulf/rbn/params"
 	"github.com/spf13/viper"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -14,14 +17,35 @@ var (
 	peerPrefix = []byte("peers/")
 )
 
+func peerDbPrefix() []byte {
+	return append(peerPrefix)
+}
+
 type knownPeers struct {
 	peers map[string]PeerNode
 	lock  *sync.RWMutex
 }
 
-func (k knownPeers) GetPeer(addr string) (PeerNode, bool) {
+func (k knownPeers) Exists(addr string) bool {
 	k.lock.RLock()
-	peer, ok := k.peers[addr]
+	_, ok := k.peers[addr]
+	k.lock.RUnlock()
+	return ok
+}
+
+func (k knownPeers) GetPeers() map[string]PeerNode {
+	var peers map[string]PeerNode
+	k.lock.RLock()
+	peers = k.peers
+	k.lock.RUnlock()
+	return peers
+}
+
+func (k knownPeers) GetPeer(addr string) (PeerNode, bool) {
+	var peer PeerNode
+	var ok bool
+	k.lock.RLock()
+	peer, ok = k.peers[addr]
 	k.lock.RUnlock()
 	return peer, ok
 }
@@ -118,6 +142,15 @@ func (pn *PeerNode) Deserialize(src []byte) error {
 	return decoder.Decode(pn)
 }
 
+// checks if peer is the treasurer node
+func isRootNode(peer PeerNode) bool {
+	if _, ok := params.RovergulfTreasurerAccounts[peer.TcpAddress()]; ok {
+		return ok
+	}
+
+	return false
+}
+
 func collectPeerUrls(nodes map[string]PeerNode) []string {
 	var peers []string
 
@@ -131,10 +164,22 @@ func collectPeerUrls(nodes map[string]PeerNode) []string {
 
 func defaultPeer() PeerNode {
 	return PeerNode{
-		Ip:        "127.0.0.1",
-		Port:      9420,
+		Ip:        DefaultNodeIP,
+		Port:      DefaultNodePort,
 		Root:      true,
 		Account:   common.HexToAddress("0x3c0b3b41a1e027d3E759612Af08844f1cca0DdE3"),
 		connected: false,
+		syncMode:  SyncModeFull,
 	}
+}
+
+func makeDefaultTrustedPeers() map[string]PeerNode {
+	peers := make(map[string]PeerNode)
+	for tcpAddr := range params.RovergulfTreasurerAccounts {
+		trustedNode := params.RovergulfTreasurerAccounts[tcpAddr]
+		addrParts := strings.Split(tcpAddr, ":")
+		port, _ := strconv.ParseUint(addrParts[1], 10, 64)
+		peers[tcpAddr] = NewPeerNode(addrParts[0], port, trustedNode, SyncModeFull)
+	}
+	return peers
 }

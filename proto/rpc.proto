@@ -22,21 +22,31 @@ message HealthCheckResponse {
   ServingStatus status = 1;
 }
 
+enum Command {
+  NoOp = 0;
+  Sync = 1;
+  Add = 2;
+  Get = 3;
+  List = 4;
+  Verify = 5;
+  Drop = 6;
+}
+
+enum Entity {
+  Unknown = 0;
+  Genesis = 1;
+  Balance = 2;
+  Transaction = 3;
+  Block = 4;
+  BlockHeader = 5;
+  State = 6;
+  Peer = 7;
+}
+
 message CallRequest {
-  enum Command {
-    NIL = 0;
-    SYNC_PEERS = 1;
-    SYNC_GEN = 2;
-    SYNC_STATE = 3;
-    SYNC_BLOCKS = 4;
-    TX_ADD = 7;
-    TX_GET = 8;
-    BALANCE_ADD = 9;
-    BALANCE_GET = 10;
-    BALANCE_DROP = 11;
-  }
   Command cmd = 1;
-  bytes data = 2;
+  Entity entity = 2;
+  bytes data = 3;
 }
 
 message CallResponse {

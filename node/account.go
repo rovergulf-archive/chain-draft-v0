@@ -1,7 +1,9 @@
 package node
 
 import (
+	"context"
 	"github.com/dgraph-io/badger/v3"
+	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/wallets"
 )
 
@@ -89,5 +91,28 @@ func (n *Node) setupNodeAccount() error {
 	}
 
 	n.account = w
+	return nil
+}
+
+func (n *Node) syncKeystoreBalances(ctx context.Context) error {
+	accountsList, err := n.wm.GetAllAddresses()
+	if err != nil {
+		return err
+	}
+
+	for i := range accountsList {
+		account := accountsList[i]
+
+		if _, err := n.bc.GetBalance(account); err != nil {
+			if err == core.ErrBalanceNotExists {
+				if _, err := n.bc.NewBalance(account, 0); err != nil {
+					return err
+				}
+			} else {
+				return err
+			}
+		}
+	}
+
 	return nil
 }

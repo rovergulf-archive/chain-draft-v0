@@ -8,17 +8,17 @@ import (
 )
 
 // BlockHeader represents header part of chain block
+// must be created with struct literal
 type BlockHeader struct {
-	Root      common.Hash `json:"root" yaml:"root"`
-	PrevHash  common.Hash `json:"prev_hash" yaml:"prev_hash"`
-	Hash      common.Hash `json:"hash" yaml:"hash"`
-	Number    uint64      `json:"number" yaml:"number"`
-	Timestamp int64       `json:"timestamp" yaml:"timestamp"`
-
+	Root        common.Hash    `json:"root" yaml:"root"`
+	PrevHash    common.Hash    `json:"prev_hash" yaml:"prev_hash"`
+	BlockHash   common.Hash    `json:"block_hash" yaml:"block_hash"`
+	Number      uint64         `json:"number" yaml:"number"`
+	Timestamp   int64          `json:"timestamp" yaml:"timestamp"`
 	ReceiptHash common.Hash    `json:"receipts_hash" yaml:"receipts_hash"`
 	TxHash      common.Hash    `json:"txs_hash" yaml:"txs_hash"`
 	NetherUsed  uint64         `json:"nether_used" yaml:"nether_used"`
-	Coinbase    common.Address `json:"coinbase" yaml:"coinbase"` // validator node address
+	Coinbase    common.Address `json:"coinbase" yaml:"coinbase"` // author node address
 }
 
 // Serialize serializes block header with god encodig
@@ -37,8 +37,19 @@ func (bh *BlockHeader) Deserialize(d []byte) error {
 	return decoder.Decode(bh)
 }
 
+// Hash returns a hash of the block header
+func (bh *BlockHeader) Hash() ([]byte, error) {
+	enc, err := bh.Serialize()
+	if err != nil {
+		return nil, err
+	}
+
+	hash := sha256.Sum256(enc)
+	return hash[:], nil
+}
+
 // NewBlock creates and returns Block
-func NewBlock(header BlockHeader, txs []SignedTx) *Block {
+func NewBlock(header BlockHeader, txs []*SignedTx) *Block {
 	return &Block{
 		BlockHeader:  header,
 		Transactions: txs,
@@ -48,11 +59,11 @@ func NewBlock(header BlockHeader, txs []SignedTx) *Block {
 // Block represents BlockChain state change interface
 type Block struct {
 	BlockHeader
-	Transactions []SignedTx `json:"transactions" yaml:"transactions"`
+	Transactions []*SignedTx `json:"transactions" yaml:"transactions"`
 
-	//size int64
+	TxHashes []common.Hash `json:"tx_hashes" yaml:"tx_hashes"`
 
-	//ReceivedAt int64 `json:"received_at" yaml:"received_at"`
+	ReceivedAt int64 `json:"received_at" yaml:"received_at"`
 }
 
 // Hash returns a hash of the block

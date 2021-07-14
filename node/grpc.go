@@ -79,19 +79,41 @@ func (n *Node) RpcCall(ctx context.Context, req *proto.CallRequest) (*proto.Call
 	n.logger.Debugw("RPC Call", "cmd", req.Cmd)
 
 	switch req.Cmd {
-	case proto.CallRequest_SYNC_PEERS:
-		return n.handleRpcAddPeer(ctx, req.Data)
-	case proto.CallRequest_SYNC_GEN:
+	case proto.Command_Sync:
+		switch req.Entity {
+		case proto.Entity_Genesis:
+			return nil, fmt.Errorf("not implemented")
+		case proto.Entity_Balance:
+			return nil, fmt.Errorf("not implemented")
+		case proto.Entity_Transaction:
+			return nil, fmt.Errorf("not implemented")
+		case proto.Entity_Block:
+			return nil, fmt.Errorf("not implemented")
+		case proto.Entity_BlockHeader:
+			return nil, fmt.Errorf("not implemented")
+		case proto.Entity_State:
+			return nil, fmt.Errorf("not implemented")
+		case proto.Entity_Peer:
+			return n.handleRpcAddPeer(ctx, req.Data)
+		default:
+			return nil, fmt.Errorf("invalid entity")
+		}
+	case proto.Command_Add:
+		switch req.Entity {
+		case proto.Entity_Block:
+			return n.handleRpcAddTx(ctx, req.Data)
+		case proto.Entity_Transaction:
+			return n.handleRpcAddTx(ctx, req.Data)
+		default:
+			return nil, fmt.Errorf("invalid entity")
+		}
+	case proto.Command_Get:
 		return nil, fmt.Errorf("not implemented")
-	case proto.CallRequest_SYNC_STATE:
+	case proto.Command_List:
 		return nil, fmt.Errorf("not implemented")
-	case proto.CallRequest_SYNC_BLOCKS:
+	case proto.Command_Verify:
 		return nil, fmt.Errorf("not implemented")
-	//case rpc.CallRequest_BLOCK_ADD:
-	//	return n.handleRpcAddBlock(ctx, req.Data)
-	case proto.CallRequest_TX_ADD:
-		return n.handleRpcAddTx(ctx, req.Data)
-	case proto.CallRequest_TX_GET:
+	case proto.Command_Drop:
 		return nil, fmt.Errorf("not implemented")
 	default:
 		return nil, fmt.Errorf("invalid command")
