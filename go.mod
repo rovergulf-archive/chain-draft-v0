@@ -9,7 +9,7 @@ require (
 	github.com/deckarep/golang-set v1.7.1 // indirect
 	github.com/dgraph-io/badger/v3 v3.2103.1
 	github.com/dgraph-io/dgo/v210 v210.0.0-20210421093152-78a2fece3ebd
-	github.com/ethereum/go-ethereum v1.10.4
+	github.com/ethereum/go-ethereum v1.10.6
 	github.com/go-ole/go-ole v1.2.5 // indirect
 	github.com/golang/glog v0.0.0-20210429001901-424d2337a529 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
