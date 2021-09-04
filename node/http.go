@@ -27,7 +27,7 @@ func (n *Node) serveHttp() error {
 	r.HandleFunc(endpointSync, n.SyncPeers).Methods(http.MethodGet)
 
 	r.HandleFunc("/node/info", n.nodeInfo).Methods(http.MethodGet)
-	r.HandleFunc("/node/info", n.searchKnownPeers).Methods(http.MethodGet)
+	r.HandleFunc("/peers", n.searchKnownPeers).Methods(http.MethodGet)
 
 	r.HandleFunc("/chain/info", n.healthCheck).Methods(http.MethodGet)
 	r.HandleFunc("/genesis", n.ShowGenesis).Methods(http.MethodGet)

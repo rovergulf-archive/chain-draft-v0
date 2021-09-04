@@ -1,7 +1,6 @@
 package node
 
 import (
-	"errors"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rovergulf/rbn/core/types"
 	"sync"
@@ -14,7 +13,6 @@ type pendingState struct {
 	transactions     map[common.Hash]*types.SignedTx
 	rejectedTxs      []*types.SignedTx
 	balances         map[common.Address]*types.Balance
-	receipts         map[common.Hash]*types.Receipt
 }
 
 func newPendingState() *pendingState {
@@ -22,14 +20,12 @@ func newPendingState() *pendingState {
 		lock:         new(sync.RWMutex),
 		transactions: make(map[common.Hash]*types.SignedTx),
 		balances:     make(map[common.Address]*types.Balance),
-		receipts:     make(map[common.Hash]*types.Receipt),
 	}
 }
 
 func (s *pendingState) reset() {
 	s.transactions = make(map[common.Hash]*types.SignedTx)
 	s.balances = make(map[common.Address]*types.Balance)
-	s.receipts = make(map[common.Hash]*types.Receipt)
 }
 
 func (s *pendingState) pendingTxLen() int {
@@ -102,71 +98,4 @@ func (s *pendingState) removeBalance(address common.Address) {
 	s.lock.Lock()
 	delete(s.balances, address)
 	s.lock.Unlock()
-}
-
-func (s *pendingState) getReceipt(hash common.Hash) (*types.Receipt, bool) {
-	var r *types.Receipt
-	var ok bool
-	s.lock.RLock()
-	r, ok = s.receipts[hash]
-	s.lock.RUnlock()
-	return r, ok
-}
-
-func (s *pendingState) addReceipt(hash common.Hash, balance *types.Receipt) error {
-	s.lock.Lock()
-	s.receipts[hash] = balance
-	s.lock.Unlock()
-	return nil
-}
-
-func (s *pendingState) removeReceipt(hash common.Hash) {
-	s.lock.Lock()
-	delete(s.receipts, hash)
-	s.lock.Unlock()
-}
-
-func (s *pendingState) applyPendingTx(txHash common.Hash) (*types.Receipt, error) {
-	tx, ok := s.getTx(txHash)
-	if !ok {
-		return nil, errors.New("pending tx not found")
-	}
-
-	sender, ok := s.getBalance(tx.From)
-	if !ok {
-		return nil, errors.New("pending sender balance not found")
-	}
-
-	recipient, ok := s.getBalance(tx.From)
-	if !ok {
-		return nil, errors.New("pending recipient balance not found")
-	}
-
-	sender.Balance -= tx.Cost()
-	recipient.Balance += tx.Value
-
-	sender.Nonce = tx.Nonce
-	recipient.Nonce++
-
-	receipt := &types.Receipt{
-		Addr:        sender.Address,
-		Balance:     sender.Balance,
-		NetherUsed:  tx.Nether,
-		NetherPrice: tx.NetherPrice,
-		TxHash:      txHash,
-	}
-
-	if err := s.addBalance(sender.Address, sender); err != nil {
-		return nil, err
-	}
-
-	if err := s.addBalance(recipient.Address, recipient); err != nil {
-		return nil, err
-	}
-
-	if err := s.addReceipt(txHash, receipt); err != nil {
-		return nil, err
-	}
-
-	return receipt, nil
 }

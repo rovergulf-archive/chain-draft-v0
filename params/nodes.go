@@ -12,3 +12,9 @@ const (
 	SaoPaoloNodeAddr   = ""
 	LosAngelesNodeAddr = ""
 )
+
+const (
+	BlockHeaderTopicPrefix = ""
+	StateTopicPrefix       = ""
+	TxTopicPrefix          = ""
+)

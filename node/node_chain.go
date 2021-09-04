@@ -10,7 +10,6 @@ import (
 	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/core/types"
 	"github.com/rovergulf/rbn/params"
-	"github.com/rovergulf/rbn/wallets"
 	"time"
 )
 
@@ -96,9 +95,9 @@ func (n *Node) genRewardTxs(b *types.Block) ([]*types.SignedTx, error) {
 	var txs []*types.SignedTx
 
 	peers := n.knownPeers.GetPeers()
-	if len(peers) == 0 {
-		peers[n.metadata.TcpAddress()] = n.metadata
-	}
+
+	// add this node to separate reward between all peers
+	peers[n.metadata.TcpAddress()] = n.metadata
 
 	peersAward := b.NetherUsed / uint64(len(peers))
 
@@ -192,10 +191,13 @@ func (n *Node) AddPendingTX(ctx context.Context, tx types.SignedTx, peer PeerNod
 
 	hash := common.BytesToHash(txHash)
 
+	balance.Balance -= tx.Cost()
+	balance.Nonce = tx.Nonce
+
 	receipt := &types.Receipt{
 		Addr:        tx.From,
 		Status:      0,
-		Balance:     balance.Balance - tx.Cost(),
+		Balance:     balance.Balance,
 		NetherUsed:  tx.Nether,
 		NetherPrice: tx.NetherPrice,
 		TxHash:      hash,
@@ -207,28 +209,4 @@ func (n *Node) AddPendingTX(ctx context.Context, tx types.SignedTx, peer PeerNod
 	}
 
 	return receipt, nil
-}
-
-// checks if there is a matched key in a wallet store, and creates chain balance if it does not exists yet
-func (n *Node) checkBalanceExistence(ctx context.Context, addr common.Address) (*types.Balance, error) {
-	balance, err := n.bc.GetBalance(addr)
-	if err != nil {
-		if err == core.ErrBalanceNotExists {
-			if err := n.wm.Exists(ctx, addr); err != nil {
-				if err != wallets.ErrAccountNotExists {
-					n.logger.Errorf("Unable to check account existence: %s", err)
-				}
-				return nil, err
-			} else {
-				if b, err := n.bc.NewBalance(addr, 0); err != nil {
-					return nil, err
-				} else {
-					return b, nil
-				}
-			}
-		}
-		return nil, err
-	}
-
-	return balance, nil
 }

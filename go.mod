@@ -20,9 +20,20 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
 	github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645
+	github.com/ipfs/go-log/v2 v2.3.0 // indirect
 	github.com/klauspost/compress v1.13.1 // indirect
+	github.com/libp2p/go-libp2p v0.14.4
+	github.com/libp2p/go-libp2p-core v0.8.6
+	github.com/libp2p/go-libp2p-kad-dht v0.13.1
+	github.com/libp2p/go-libp2p-mplex v0.4.1
+	github.com/libp2p/go-libp2p-pubsub v0.5.4
+	github.com/libp2p/go-libp2p-tls v0.1.3
+	github.com/libp2p/go-libp2p-yamux v0.5.4
+	github.com/libp2p/go-tcp-transport v0.2.7
+	github.com/libp2p/go-ws-transport v0.4.0
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
+	github.com/multiformats/go-multiaddr v0.3.3
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/peterh/liner v1.2.1 // indirect
 	github.com/prometheus/client_golang v1.11.0
@@ -50,6 +61,5 @@ require (
 	google.golang.org/genproto v0.0.0-20210712171009-5404628d0f46 // indirect
 	google.golang.org/grpc v1.39.0
 	google.golang.org/protobuf v1.27.1
-	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v2 v2.4.0
 )
