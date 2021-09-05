@@ -7,11 +7,72 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/opentracing/opentracing-go"
 	"github.com/rovergulf/rbn/proto"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+func (n *Node) listenSub(ctx context.Context, sub *pubsub.Subscription) (*proto.CallResponse, error) {
+	n.logger.Debugw("Start listening topic", "topic", sub.Topic())
+	defer sub.Cancel()
+	for {
+		msg, err := sub.Next(ctx)
+		if err != nil {
+			n.logger.Errorw("Unable to receive next message",
+				"topic", sub.Topic(), "err", err)
+			continue
+		}
+
+		var req proto.CallRequest
+		if err := json.Unmarshal(msg.Data, &req); err != nil {
+			n.logger.Errorf("Unable to unmarshal request: %s", err)
+			continue
+		}
+
+		switch req.Cmd {
+		case proto.Command_Sync:
+			switch req.Entity {
+			case proto.Entity_Genesis:
+				return nil, fmt.Errorf("not implemented")
+			case proto.Entity_Balance:
+				return nil, fmt.Errorf("not implemented")
+			case proto.Entity_Transaction:
+				return nil, fmt.Errorf("not implemented")
+			case proto.Entity_Block:
+				return nil, fmt.Errorf("not implemented")
+			case proto.Entity_BlockHeader:
+				return nil, fmt.Errorf("not implemented")
+			case proto.Entity_State:
+				return nil, fmt.Errorf("not implemented")
+			case proto.Entity_Peer:
+				return n.handleRpcAddPeer(ctx, req.Data)
+			default:
+				return nil, fmt.Errorf("invalid entity")
+			}
+		case proto.Command_Add:
+			switch req.Entity {
+			case proto.Entity_Block:
+				return n.handleRpcAddTx(ctx, req.Data)
+			case proto.Entity_Transaction:
+				return n.handleRpcAddTx(ctx, req.Data)
+			default:
+				return nil, fmt.Errorf("invalid entity")
+			}
+		case proto.Command_Get:
+			return nil, fmt.Errorf("not implemented")
+		case proto.Command_List:
+			return nil, fmt.Errorf("not implemented")
+		case proto.Command_Verify:
+			return nil, fmt.Errorf("not implemented")
+		case proto.Command_Drop:
+			return nil, fmt.Errorf("not implemented")
+		default:
+			return nil, fmt.Errorf("invalid command")
+		}
+	}
+}
 
 func (n *Node) handleRpcAddPeer(ctx context.Context, data []byte) (*proto.CallResponse, error) {
 	var req JoinPeerRequest

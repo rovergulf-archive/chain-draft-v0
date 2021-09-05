@@ -12,3 +12,7 @@ const (
 	SaoPaoloNodeAddr   = ""
 	LosAngelesNodeAddr = ""
 )
+
+const (
+	MainSub = "/rovergulf/chain/state/0.0.1"
+)

@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/gorilla/mux"
+	"github.com/libp2p/go-libp2p-core/host"
+	kaddht "github.com/libp2p/go-libp2p-kad-dht"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/core/types"
 	"github.com/rovergulf/rbn/database/badgerdb"
@@ -15,7 +18,6 @@ import (
 	"github.com/spf13/viper"
 	"go.etcd.io/etcd/raft/v3"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
 	"os"
 	"sync"
 	"time"
@@ -44,8 +46,12 @@ type Node struct {
 	wm *wallets.Manager
 	db *badger.DB
 
-	grpcServer  *grpc.Server
 	httpHandler httpServer
+
+	host      host.Host
+	dht       *kaddht.IpfsDHT
+	mainTopic *pubsub.Topic
+	mainSub   *pubsub.Subscription
 
 	inGenRace bool
 
@@ -140,9 +146,9 @@ func (n *Node) Init(ctx context.Context) error {
 
 	n.setNetworkMetadata(ctx)
 
-	if err := n.syncKeystoreBalances(ctx); err != nil {
-		n.logger.Errorf("Unable to sync keystore balances with chain state: %s", err)
-	}
+	//if err := n.syncKeystoreBalances(ctx); err != nil {
+	//	n.logger.Errorf("Unable to sync keystore balances with chain state: %s", err)
+	//}
 
 	return nil
 }
@@ -165,21 +171,27 @@ func (n *Node) Run(ctx context.Context) error {
 		"addr", nodeAddress, "is_root", n.metadata.Root)
 	go func() {
 		n.logger.Debugw("Listening gRPC", "addr", nodeAddress)
-		grpcSrv, err := n.PrepareGrpcServer()
+		h, err := n.PrepareP2pPeer(ctx)
 		if err != nil {
-			n.logger.Errorf("Unable to prepare gRPC server: %s", err)
+			n.logger.Errorf("Unable to prepare p2p host: %s", err)
 			n.Shutdown()
 		}
-		n.grpcServer = grpcSrv
 
-		if err := n.RunGrpcServer(nodeAddress); err != nil {
-			n.logger.Errorf("Unable to start gRPC server: %s", err)
+		n.host = h
+
+		if err := n.PrepareSubs(ctx, params.MainSub); err != nil {
+			n.logger.Errorf("Unable to run p2p host: %s", err)
+			n.Shutdown()
+		}
+
+		if err := n.RunP2pServer(ctx); err != nil {
+			n.logger.Errorf("Unable to run p2p host: %s", err)
 			n.Shutdown()
 		}
 	}()
 
-	go n.race(ctx)
-	go n.sync(ctx)
+	//go n.race(ctx)
+	//go n.sync(ctx)
 
 	httpApiAddress := fmt.Sprintf("%s:%s",
 		viper.GetString("http.addr"),
@@ -190,8 +202,8 @@ func (n *Node) Run(ctx context.Context) error {
 }
 
 func (n *Node) Shutdown() {
-	defer close(n.newSyncTXs)
-	defer close(n.newSyncBlocks)
+	close(n.newSyncTXs)
+	close(n.newSyncBlocks)
 
 	var wg sync.WaitGroup
 
@@ -221,11 +233,13 @@ func (n *Node) Shutdown() {
 		}()
 	}
 
-	if n.grpcServer != nil {
+	if n.host != nil {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			n.grpcServer.GracefulStop()
+			if err := n.host.Close(); err != nil {
+				n.logger.Errorf("Unable to close p2p host: %s", err)
+			}
 		}()
 	}
 

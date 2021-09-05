@@ -4,10 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
-## 14 Jul 2021
+## 5 Sep 2021
 
 ### Added
-- Reward transactions handle
+- basic p2p host usage and connection
 
 ### Changed
 
@@ -15,6 +15,23 @@ All notable changes to this project will be documented in this file.
 
 ### Removed
 
+
+## 4 Sep 2021
+
+### Added
+- libp2p usage
+
+### Changed
+- pb files regenerated without gRPC server, probably should be removed
+
+### Removed
+- grpc server usage
+
+
+## 14 Jul 2021
+
+### Added
+- Reward transactions handle
 
 ## 13 Jul 2021
 
