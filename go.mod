@@ -32,7 +32,7 @@ require (
 	github.com/libp2p/go-ws-transport v0.4.0
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/multiformats/go-multiaddr v0.3.3
+	github.com/multiformats/go-multiaddr v0.4.0
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/peterh/liner v1.2.1 // indirect
 	github.com/prometheus/client_golang v1.11.0
