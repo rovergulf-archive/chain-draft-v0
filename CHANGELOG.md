@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
+## 5 Sep 2021
+
+### Added
+- basic p2p host usage and connection
+
+### Changed
+
+### Fixed
+
+### Removed
+
+
 ## 4 Sep 2021
 
 ### Added
@@ -11,8 +23,6 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - pb files regenerated without gRPC server, probably should be removed
-
-### Fixed
 
 ### Removed
 - grpc server usage

@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"fmt"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -15,6 +16,7 @@ import (
 	"github.com/libp2p/go-tcp-transport"
 	websocket "github.com/libp2p/go-ws-transport"
 	"github.com/multiformats/go-multiaddr"
+	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"time"
 )
@@ -107,7 +109,9 @@ func (n *Node) RunP2pServer(ctx context.Context) error {
 		n.logger.Debugf("Listening on '%s'", addr)
 	}
 
-	targetAddr, err := multiaddr.NewMultiaddr("/ip4/127.0.0.1/tcp/63785/p2p/QmWjz6xb8v9K4KnYEwP5Yk75k5mMBCehzWFLCvvQpYxF3d")
+	mAddr := fmt.Sprintf("/ip4/%s/tcp/%s/p2p/QmWjz6xb8v9K4KnYEwP5Yk75k5mMBCehzWFLCvvQpYxF3d",
+		viper.GetString("node.addr"), viper.GetString("node.port"))
+	targetAddr, err := multiaddr.NewMultiaddr(mAddr)
 	if err != nil {
 		n.logger.Errorf("Failed to connect target: %s", err)
 		return err
