@@ -19,7 +19,6 @@ require (
 	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
-	github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645
 	github.com/ipfs/go-log/v2 v2.3.0 // indirect
 	github.com/klauspost/compress v1.13.1 // indirect
 	github.com/libp2p/go-libp2p v0.14.4

@@ -14,7 +14,5 @@ const (
 )
 
 const (
-	BlockHeaderTopicPrefix = ""
-	StateTopicPrefix       = ""
-	TxTopicPrefix          = ""
+	MainSub = "/rovergulf/chain/state/0.0.1"
 )
