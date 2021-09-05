@@ -53,7 +53,7 @@ require (
 	go.etcd.io/etcd/raft/v3 v3.5.0
 	go.uber.org/atomic v1.8.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect
-	go.uber.org/zap v1.18.1
+	go.uber.org/zap v1.19.0
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97 // indirect
 	google.golang.org/genproto v0.0.0-20210712171009-5404628d0f46 // indirect
 	google.golang.org/grpc v1.39.0
