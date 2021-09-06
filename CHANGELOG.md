@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
+## 7 Sep 2021
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Removed
+
+
+## 6 Sep 2021
+
+### Added
+
+### Changed
+- `proto` package renamed and moved to `node/pb`. `scripts/genproto.sh` fixed as well
+
+### Fixed
+- Downgrade go-multiaddr and libp2p-go-core libs, due runtime error
+
+### Removed
+- libp2p usage, there is etherium library, simply working right up here. What did I even tried to do?
+
+
 ## 5 Sep 2021
 
 ### Added
@@ -12,6 +37,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 ### Fixed
+- close topic, dht and subs on graceful shutdown
 
 ### Removed
 

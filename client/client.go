@@ -3,8 +3,8 @@ package client
 import (
 	"context"
 	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/rovergulf/rbn/node/pb"
 	"github.com/rovergulf/rbn/pkg/traceutil"
-	"github.com/rovergulf/rbn/proto"
 	"go.uber.org/zap"
 )
 
@@ -34,7 +34,7 @@ func (c *NetherClient) Stop() {
 	}
 }
 
-func (c *NetherClient) MakeCall(ctx context.Context, cmd proto.Command, ent proto.Entity, req []byte) (*proto.CallResponse, error) {
+func (c *NetherClient) MakeCall(ctx context.Context, cmd pb.Command, ent pb.Entity, req []byte) (*pb.CallResponse, error) {
 
 	return nil, nil
 }

@@ -7,74 +7,66 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/opentracing/opentracing-go"
-	"github.com/rovergulf/rbn/proto"
+	"github.com/rovergulf/rbn/node/pb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
-func (n *Node) listenSub(ctx context.Context, sub *pubsub.Subscription) (*proto.CallResponse, error) {
-	n.logger.Debugw("Start listening topic", "topic", sub.Topic())
-	defer sub.Cancel()
-	for {
-		msg, err := sub.Next(ctx)
-		if err != nil {
-			n.logger.Errorw("Unable to receive next message",
-				"topic", sub.Topic(), "err", err)
-			continue
-		}
+// probably would be removed
+func (n *Node) handleRpcRequest(ctx context.Context, data []byte) (*pb.CallResponse, error) {
 
-		var req proto.CallRequest
-		if err := json.Unmarshal(msg.Data, &req); err != nil {
-			n.logger.Errorf("Unable to unmarshal request: %s", err)
-			continue
-		}
+	var req pb.CallRequest
+	if err := proto.Unmarshal(data, &req); err != nil {
+		n.logger.Errorf("Unable to unmarshal request: %s", err)
+		return nil, err
+	}
+	n.logger.Debugw("Handling RPC request", "cmd", req.Cmd, "entity", req.Entity)
 
-		switch req.Cmd {
-		case proto.Command_Sync:
-			switch req.Entity {
-			case proto.Entity_Genesis:
-				return nil, fmt.Errorf("not implemented")
-			case proto.Entity_Balance:
-				return nil, fmt.Errorf("not implemented")
-			case proto.Entity_Transaction:
-				return nil, fmt.Errorf("not implemented")
-			case proto.Entity_Block:
-				return nil, fmt.Errorf("not implemented")
-			case proto.Entity_BlockHeader:
-				return nil, fmt.Errorf("not implemented")
-			case proto.Entity_State:
-				return nil, fmt.Errorf("not implemented")
-			case proto.Entity_Peer:
-				return n.handleRpcAddPeer(ctx, req.Data)
-			default:
-				return nil, fmt.Errorf("invalid entity")
-			}
-		case proto.Command_Add:
-			switch req.Entity {
-			case proto.Entity_Block:
-				return n.handleRpcAddTx(ctx, req.Data)
-			case proto.Entity_Transaction:
-				return n.handleRpcAddTx(ctx, req.Data)
-			default:
-				return nil, fmt.Errorf("invalid entity")
-			}
-		case proto.Command_Get:
+	switch req.Cmd {
+	case pb.Command_Sync:
+		switch req.Entity {
+		case pb.Entity_Genesis:
 			return nil, fmt.Errorf("not implemented")
-		case proto.Command_List:
+		case pb.Entity_Balance:
 			return nil, fmt.Errorf("not implemented")
-		case proto.Command_Verify:
+		case pb.Entity_Transaction:
 			return nil, fmt.Errorf("not implemented")
-		case proto.Command_Drop:
+		case pb.Entity_Block:
 			return nil, fmt.Errorf("not implemented")
+		case pb.Entity_BlockHeader:
+			return nil, fmt.Errorf("not implemented")
+		case pb.Entity_State:
+			return nil, fmt.Errorf("not implemented")
+		case pb.Entity_Peer:
+			return n.handleRpcAddPeer(ctx, req.Data)
 		default:
-			return nil, fmt.Errorf("invalid command")
+			return nil, fmt.Errorf("invalid entity")
 		}
+	case pb.Command_Add:
+		switch req.Entity {
+		case pb.Entity_Block:
+			return n.handleRpcAddTx(ctx, req.Data)
+		case pb.Entity_Transaction:
+			return n.handleRpcAddTx(ctx, req.Data)
+		default:
+			return nil, fmt.Errorf("invalid entity")
+		}
+	case pb.Command_Get:
+		return nil, fmt.Errorf("not implemented")
+	case pb.Command_List:
+		return nil, fmt.Errorf("not implemented")
+	case pb.Command_Verify:
+		return nil, fmt.Errorf("not implemented")
+	case pb.Command_Drop:
+		return nil, fmt.Errorf("not implemented")
+	default:
+		return nil, fmt.Errorf("invalid command")
 	}
 }
 
-func (n *Node) handleRpcAddPeer(ctx context.Context, data []byte) (*proto.CallResponse, error) {
+func (n *Node) handleRpcAddPeer(ctx context.Context, data []byte) (*pb.CallResponse, error) {
 	var req JoinPeerRequest
 
 	if err := json.Unmarshal(data, &req); err != nil {
@@ -104,13 +96,13 @@ func (n *Node) handleRpcAddPeer(ctx context.Context, data []byte) (*proto.CallRe
 
 	n.knownPeers.AddPeer(pn.TcpAddress(), pn)
 
-	return &proto.CallResponse{
+	return &pb.CallResponse{
 		Status: 0, // codes.OK
 		Data:   nil,
 	}, nil
 }
 
-func (n *Node) handleRpcGetBlock(ctx context.Context, data []byte) (*proto.CallResponse, error) {
+func (n *Node) handleRpcGetBlock(ctx context.Context, data []byte) (*pb.CallResponse, error) {
 	if len(data) < 0 {
 		return nil, fmt.Errorf("invalid hash")
 	}
@@ -125,24 +117,24 @@ func (n *Node) handleRpcGetBlock(ctx context.Context, data []byte) (*proto.CallR
 		return nil, err
 	}
 
-	return &proto.CallResponse{
+	return &pb.CallResponse{
 		Status: 0,
 		Data:   result,
 	}, nil
 }
 
-func (n *Node) handleRpcAddBlock(ctx context.Context, data []byte) (*proto.CallResponse, error) {
+func (n *Node) handleRpcAddBlock(ctx context.Context, data []byte) (*pb.CallResponse, error) {
 	if len(data) < 0 {
 		return nil, fmt.Errorf("empty data")
 	}
 
-	return &proto.CallResponse{
+	return &pb.CallResponse{
 		Status: 1,
 		Data:   nil,
 	}, fmt.Errorf("not implemented")
 }
 
-func (n *Node) handleRpcAddTx(ctx context.Context, data []byte) (*proto.CallResponse, error) {
+func (n *Node) handleRpcAddTx(ctx context.Context, data []byte) (*pb.CallResponse, error) {
 	if len(data) < 0 {
 		return nil, fmt.Errorf("empty data")
 	}
@@ -155,7 +147,7 @@ func (n *Node) handleRpcAddTx(ctx context.Context, data []byte) (*proto.CallResp
 
 	fmt.Println("got tx", req)
 
-	return &proto.CallResponse{
+	return &pb.CallResponse{
 		Status: 1,
 		Data:   nil,
 	}, fmt.Errorf("not implemented")

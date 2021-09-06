@@ -142,12 +142,13 @@ func setConfigDefaults() {
 	viper.SetDefault("keystore", "")
 	viper.SetDefault("pid_file", "/var/run/rbn/pidfile")
 
-	// TBD dgraph connection settings -
-	viper.SetDefault("dgraph.enabled", false)
-	viper.SetDefault("dgraph.host", "127.0.0.1")
-	viper.SetDefault("dgraph.port", "9080")
-	viper.SetDefault("dgraph.user", "")
-	viper.SetDefault("dgraph.password", "")
+	// TBD dgraph connection settings
+	// !!! Database interface needs to be implemented to use that
+	//viper.SetDefault("dgraph.enabled", false)
+	//viper.SetDefault("dgraph.host", "127.0.0.1")
+	//viper.SetDefault("dgraph.port", "9080")
+	//viper.SetDefault("dgraph.user", "")
+	//viper.SetDefault("dgraph.password", "")
 
 	// ssl configuration
 	viper.SetDefault("ssl.enabled", false)
@@ -163,13 +164,16 @@ func setConfigDefaults() {
 	viper.SetDefault("network.addr", "127.0.0.1:9420")
 	viper.SetDefault("network.discovery", "swarm.rovergulf.net:443")
 
-	// http server
+	// p2p settings
+	viper.SetDefault("node.max_peers", 256)
 	viper.SetDefault("node.addr", "127.0.0.1")
 	viper.SetDefault("node.port", 9420)
 	viper.SetDefault("node.sync_mode", node.SyncModeDefault)
 	viper.SetDefault("node.sync_interval", 5)
 	viper.SetDefault("node.cache_dir", "")
+	viper.SetDefault("node.discovery", true)
 
+	// http server
 	viper.SetDefault("http.disabled", false)
 	viper.SetDefault("http.addr", "127.0.0.1")
 	viper.SetDefault("http.port", 9469)

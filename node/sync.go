@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/rovergulf/rbn/client"
-	"github.com/rovergulf/rbn/proto"
+	"github.com/rovergulf/rbn/node/pb"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -116,7 +116,7 @@ func (n *Node) joinKnownPeer(ctx context.Context, peer PeerNode) error {
 		return err
 	}
 
-	if _, err := peer.client.MakeCall(ctx, proto.Command_Sync, proto.Entity_Peer, data); err != nil {
+	if _, err := peer.client.MakeCall(ctx, pb.Command_Sync, pb.Entity_Peer, data); err != nil {
 		st, ok := status.FromError(err)
 		if ok {
 			if st.Code() == codes.AlreadyExists {
