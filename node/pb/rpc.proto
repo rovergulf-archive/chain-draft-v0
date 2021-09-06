@@ -1,6 +1,6 @@
 syntax = "proto3";
 package rovergulf.proto.rbn.v1;
-option go_package = "github.com/rovergulf/rbn/proto";
+option go_package = "github.com/rovergulf/rbn/node/pb";
 
 enum Command {
   NoOp = 0;

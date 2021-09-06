@@ -8,7 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/console/prompt"
 	"github.com/rovergulf/rbn/client"
 	"github.com/rovergulf/rbn/node"
-	"github.com/rovergulf/rbn/proto"
+	"github.com/rovergulf/rbn/node/pb"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -117,7 +117,7 @@ func txSendCmd() *cobra.Command {
 				return err
 			}
 
-			res, err := c.MakeCall(ctx, proto.Command_Add, proto.Entity_Transaction, callData)
+			res, err := c.MakeCall(ctx, pb.Command_Add, pb.Entity_Transaction, callData)
 			if err != nil {
 				return err
 			}

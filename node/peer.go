@@ -76,6 +76,8 @@ const (
 
 // PeerNode represents distributed node network metadata
 type PeerNode struct {
+	Id      string         `json:"id" yaml:"id"`
+	Addrs   []string       `json:"addrs" yaml:"addrs"`
 	Ip      string         `json:"ip" yaml:"ip"`
 	Port    uint64         `json:"port" yaml:"port"`
 	Root    bool           `json:"root" yaml:"root"`
@@ -140,26 +142,6 @@ func (pn *PeerNode) Serialize() ([]byte, error) {
 func (pn *PeerNode) Deserialize(src []byte) error {
 	decoder := gob.NewDecoder(bytes.NewReader(src))
 	return decoder.Decode(pn)
-}
-
-// checks if peer is the treasurer node
-func isRootNode(peer PeerNode) bool {
-	if _, ok := params.RovergulfTreasurerAccounts[peer.TcpAddress()]; ok {
-		return ok
-	}
-
-	return false
-}
-
-func collectPeerUrls(nodes map[string]PeerNode) []string {
-	var peers []string
-
-	for peer := range nodes {
-		node := nodes[peer]
-		peers = append(peers, node.TcpAddress())
-	}
-
-	return peers
 }
 
 func defaultPeer() PeerNode {

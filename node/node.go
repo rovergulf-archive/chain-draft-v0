@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/dgraph-io/badger/v3"
+	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/gorilla/mux"
-	"github.com/libp2p/go-libp2p-core/host"
-	kaddht "github.com/libp2p/go-libp2p-kad-dht"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/rovergulf/rbn/core"
 	"github.com/rovergulf/rbn/core/types"
 	"github.com/rovergulf/rbn/database/badgerdb"
@@ -48,10 +46,7 @@ type Node struct {
 
 	httpHandler httpServer
 
-	host      host.Host
-	dht       *kaddht.IpfsDHT
-	mainTopic *pubsub.Topic
-	mainSub   *pubsub.Subscription
+	srv *p2p.Server
 
 	inGenRace bool
 
@@ -170,28 +165,12 @@ func (n *Node) Run(ctx context.Context) error {
 	n.logger.Infow("Starting node...",
 		"addr", nodeAddress, "is_root", n.metadata.Root)
 	go func() {
-		n.logger.Debugw("Listening gRPC", "addr", nodeAddress)
-		h, err := n.PrepareP2pPeer(ctx)
-		if err != nil {
-			n.logger.Errorf("Unable to prepare p2p host: %s", err)
-			n.Shutdown()
-		}
-
-		n.host = h
-
-		if err := n.PrepareSubs(ctx, params.MainSub); err != nil {
-			n.logger.Errorf("Unable to run p2p host: %s", err)
-			n.Shutdown()
-		}
-
-		if err := n.RunP2pServer(ctx); err != nil {
-			n.logger.Errorf("Unable to run p2p host: %s", err)
+		n.logger.Debugw("Starting p2p node", "addr", nodeAddress)
+		if err := n.newEthP2pServer(ctx); err != nil {
+			n.logger.Errorf("Unable to run eth.p2p server: %s", err)
 			n.Shutdown()
 		}
 	}()
-
-	//go n.race(ctx)
-	//go n.sync(ctx)
 
 	httpApiAddress := fmt.Sprintf("%s:%s",
 		viper.GetString("http.addr"),
@@ -205,53 +184,27 @@ func (n *Node) Shutdown() {
 	close(n.newSyncTXs)
 	close(n.newSyncBlocks)
 
-	var wg sync.WaitGroup
+	if n.srv != nil {
+		n.srv.Stop()
+	}
 
 	if n.db != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := n.db.Close(); err != nil {
-				n.logger.Errorf("Unable to close node db: %s", err)
-			}
-		}()
+		if err := n.db.Close(); err != nil {
+			n.logger.Errorf("Unable to close node db: %s", err)
+		}
 	}
 
 	if n.bc != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			n.bc.Shutdown()
-		}()
+		n.bc.Shutdown()
 	}
 
 	if n.wm != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			n.wm.Shutdown()
-		}()
-	}
-
-	if n.host != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := n.host.Close(); err != nil {
-				n.logger.Errorf("Unable to close p2p host: %s", err)
-			}
-		}()
+		n.wm.Shutdown()
 	}
 
 	if n.tracer != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			n.tracer.Close()
-		}()
+		n.tracer.Close()
 	}
-
-	wg.Wait()
 
 	os.Exit(0)
 }

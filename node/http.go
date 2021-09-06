@@ -17,17 +17,23 @@ import (
 func (n *Node) serveHttp() error {
 	r := n.httpHandler.router
 
-	r.HandleFunc("/health", n.healthCheck).Methods(http.MethodGet)
+	// http utility routes
+
 	r.Handle("/metrics", promhttp.Handler()).Methods(http.MethodGet)
 	r.HandleFunc("/metrics/json", n.DiscoverMetrics).Methods(http.MethodGet)
+	r.HandleFunc("/health", n.healthCheck).Methods(http.MethodGet)
 	r.HandleFunc("/routes", n.WalkRoutes).Methods(http.MethodGet)
+
+	// end of http utility routes
+
+	// node routes
 
 	r.HandleFunc(endpointStatus, n.healthCheck).Methods(http.MethodGet)
 	r.HandleFunc(endpointAddPeer, n.AddPeerNode).Methods(http.MethodGet)
 	r.HandleFunc(endpointSync, n.SyncPeers).Methods(http.MethodGet)
 
 	r.HandleFunc("/node/info", n.nodeInfo).Methods(http.MethodGet)
-	r.HandleFunc("/peers", n.searchKnownPeers).Methods(http.MethodGet)
+	r.HandleFunc("/node/peers", n.searchKnownPeers).Methods(http.MethodGet)
 
 	r.HandleFunc("/chain/info", n.healthCheck).Methods(http.MethodGet)
 	r.HandleFunc("/genesis", n.ShowGenesis).Methods(http.MethodGet)
@@ -67,10 +73,11 @@ func (n *Node) nodeInfo(w http.ResponseWriter, r *http.Request) {
 	nLsm, nVlog := n.db.Size()     // node db size
 
 	n.httpResponse(w, map[string]interface{}{
-		"peer":        n.metadata,
+		"node_info":   n.srv.NodeInfo(),
 		"lash_hash":   lb.BlockHeader.BlockHash.Hex(),
 		"pending_txs": n.pendingState.pendingTxLen(),
-		"peers":       len(n.knownPeers.peers),
+		"peers":       n.srv.PeerCount(),
+		"peers_info":  n.srv.PeersInfo(),
 		"in_gen_race": n.inGenRace,
 		"db_size": map[string]int64{
 			"chain_lsm":    bcLsm,
@@ -84,15 +91,7 @@ func (n *Node) nodeInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (n *Node) searchKnownPeers(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	peers, err := n.searchPeers(ctx)
-	if err != nil {
-		n.httpResponse(w, err, http.StatusInternalServerError)
-		return
-	}
-
-	n.httpResponse(w, peers)
+	n.httpResponse(w, n.srv.PeersInfo())
 }
 
 func (n *Node) ShowGenesis(w http.ResponseWriter, r *http.Request) {

@@ -9,6 +9,7 @@ import (
 	"github.com/prometheus/prom2json"
 	"github.com/rovergulf/rbn/params"
 	"github.com/rovergulf/rbn/pkg/resutil"
+	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"net/http"
 	"strings"
@@ -141,16 +142,6 @@ func (n *Node) WalkRoutes(w http.ResponseWriter, r *http.Request) {
 	n.httpResponse(w, results)
 }
 
-func (n *Node) healthCheck(w http.ResponseWriter, r *http.Request) {
-	n.httpResponse(w, map[string]interface{}{
-		"http_status": http.StatusOK,
-		"timestamp":   time.Now().Unix(),
-		"run_date":    params.RunDate.Format(time.RFC1123),
-		"node_status": "healthy",
-		"in_gamble":   n.inGenRace,
-	})
-}
-
 func (n *Node) DiscoverMetrics(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -180,4 +171,16 @@ func (n *Node) DiscoverMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	n.httpResponse(w, result)
+}
+
+func (n *Node) healthCheck(w http.ResponseWriter, r *http.Request) {
+	n.httpResponse(w, map[string]interface{}{
+		"version":     "v" + params.MetaVersion,
+		"http_status": http.StatusOK,
+		"timestamp":   time.Now().Unix(),
+		"run_date":    params.RunDate.Format(time.RFC1123),
+		"healthy":     true,
+		"http":        fmt.Sprintf("%s:%s", viper.GetString("http.addr"), viper.GetString("http.port")),
+		"p2p":         fmt.Sprintf("%s:%s", viper.GetString("node.addr"), viper.GetString("node.port")),
+	})
 }
