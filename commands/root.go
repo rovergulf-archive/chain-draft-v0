@@ -171,7 +171,7 @@ func setConfigDefaults() {
 	viper.SetDefault("node.sync_mode", node.SyncModeDefault)
 	viper.SetDefault("node.sync_interval", 5)
 	viper.SetDefault("node.cache_dir", "")
-	viper.SetDefault("node.discovery", true)
+	viper.SetDefault("node.no_discovery", false)
 
 	// http server
 	viper.SetDefault("http.disabled", false)

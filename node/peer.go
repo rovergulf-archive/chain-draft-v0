@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/rovergulf/rbn/client"
 	"github.com/rovergulf/rbn/params"
 	"github.com/spf13/viper"
@@ -155,10 +156,24 @@ func defaultPeer() PeerNode {
 	}
 }
 
+// mainNetBootnodes returns the enode URLs of the P2P bootstrap nodes operated
+// by the Rovergulf Engineers running the V5 discovery protocol.
+func mainNetBootNodes() []*enode.Node {
+	nodes := make([]*enode.Node, len(params.MainNetBootNodes))
+	for i, url := range params.MainNetBootNodes {
+		var err error
+		nodes[i], err = enode.Parse(enode.ValidSchemes, url)
+		if err != nil {
+			panic("invalid node URL: " + err.Error())
+		}
+	}
+	return nodes
+}
+
 func makeDefaultTrustedPeers() map[string]PeerNode {
 	peers := make(map[string]PeerNode)
-	for tcpAddr := range params.RovergulfTreasurerAccounts {
-		trustedNode := params.RovergulfTreasurerAccounts[tcpAddr]
+	for tcpAddr := range params.TreasurerAccounts {
+		trustedNode := params.TreasurerAccounts[tcpAddr]
 		addrParts := strings.Split(tcpAddr, ":")
 		port, _ := strconv.ParseUint(addrParts[1], 10, 64)
 		peers[tcpAddr] = NewPeerNode(addrParts[0], port, trustedNode, SyncModeFull)

@@ -40,7 +40,7 @@ func (n *Node) serveHttp() error {
 
 	r.HandleFunc("/blocks", n.ListBlocks).Methods(http.MethodGet)
 	r.HandleFunc("/blocks/latest", n.LatestBlock).Methods(http.MethodGet)
-	r.HandleFunc("/block/{hash}", n.FindBlock).Methods(http.MethodGet)
+	r.HandleFunc("/blocks/{hash}", n.FindBlock).Methods(http.MethodGet)
 
 	r.HandleFunc("/balances", n.ListBalances).Methods(http.MethodGet)
 	r.HandleFunc("/balances/{addr}", n.GetBalance).Methods(http.MethodGet)
@@ -77,7 +77,6 @@ func (n *Node) nodeInfo(w http.ResponseWriter, r *http.Request) {
 		"lash_hash":   lb.BlockHeader.BlockHash.Hex(),
 		"pending_txs": n.pendingState.pendingTxLen(),
 		"peers":       n.srv.PeerCount(),
-		"peers_info":  n.srv.PeersInfo(),
 		"in_gen_race": n.inGenRace,
 		"db_size": map[string]int64{
 			"chain_lsm":    bcLsm,

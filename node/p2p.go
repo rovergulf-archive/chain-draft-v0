@@ -13,14 +13,13 @@ import (
 func (n *Node) newEthP2pServer(ctx context.Context) error {
 	listenAddr := fmt.Sprintf("%s:%s", viper.GetString("node.addr"), viper.GetString("node.port"))
 	config := p2p.Config{
-		Name:             common.MakeName("Nether Node", params.Version),
-		MaxPeers:         256,
-		ListenAddr:       listenAddr,
-		DiscoveryV5:      true,
-		PrivateKey:       n.account.GetKey().PrivateKey,
-		TrustedNodes:     n.getTrustedNodes(),
-		BootstrapNodesV5: n.getBootstrapNodes(),
-		Protocols:        []p2p.Protocol{},
+		Name:           common.MakeName("Nether Node", params.Version),
+		MaxPeers:       256,
+		ListenAddr:     listenAddr,
+		DiscoveryV5:    true,
+		PrivateKey:     n.account.GetKey().PrivateKey,
+		BootstrapNodes: mainNetBootNodes(),
+		Protocols:      n.getServerProtocols(),
 	}
 
 	n.srv = &p2p.Server{
@@ -45,15 +44,33 @@ func (n *Node) getBootstrapNodes() []*enode.Node {
 
 func (n *Node) getTrustedNodes() []*enode.Node {
 	var nodes []*enode.Node
-	nodes = append(nodes, enode.MustParseV4(params.LocalNodeAddr))
 	// temp second node
-	nodes = append(nodes, enode.MustParseV4("enode://8a83023555d2cbadf5c8f34b77fe6687fce576b7747241f17eced939ab713a00039ed605dc53bce1b8ece741c5cc509741d7963eee097d0fb06847f978577c09@127.0.0.1:9421"))
+
 	return nodes
 }
 
 func (n *Node) getServerProtocols() []p2p.Protocol {
-	var proto []p2p.Protocol
-	return proto
+	var protos []p2p.Protocol
+	protos = append(protos, p2p.Protocol{
+		Name:    "rbn",
+		Version: 1,
+		Length:  1,
+		Run: func(peer *p2p.Peer, rw p2p.MsgReadWriter) error {
+			n.logger.Infow("Run peer proto", "id", peer.ID(), "local_addr", peer.LocalAddr())
+			return nil
+		},
+		//NodeInfo: func() interface{} {
+		//	n.logger.Info("protocol node info")
+		//	return n.srv.NodeInfo()
+		//},
+		//PeerInfo: func(id enode.ID) interface{} {
+		//	n.logger.Infof("protocol enode id: %s", id.String())
+		//	return n.metadata
+		//},
+		DialCandidates: nil,
+		Attributes:     nil,
+	})
+	return protos
 }
 
 func (n *Node) connectPeers(ctx context.Context) error {

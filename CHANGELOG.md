@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
+## 8 Sep 2021
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Removed
+
+
 ## 7 Sep 2021
 
 ### Added
@@ -17,8 +28,6 @@ All notable changes to this project will be documented in this file.
 
 ## 6 Sep 2021
 
-### Added
-
 ### Changed
 - `proto` package renamed and moved to `node/pb`. `scripts/genproto.sh` fixed as well
 
@@ -27,6 +36,7 @@ All notable changes to this project will be documented in this file.
 
 ### Removed
 - libp2p usage, there is etherium library, simply working right up here. What did I even tried to do?
+- legacy `etcd/raft` import
 
 
 ## 5 Sep 2021

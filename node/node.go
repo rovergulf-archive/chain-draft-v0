@@ -14,7 +14,6 @@ import (
 	"github.com/rovergulf/rbn/pkg/traceutil"
 	"github.com/rovergulf/rbn/wallets"
 	"github.com/spf13/viper"
-	"go.etcd.io/etcd/raft/v3"
 	"go.uber.org/zap"
 	"os"
 	"sync"
@@ -57,7 +56,6 @@ type Node struct {
 	newSyncBlocks chan types.Block
 	newSyncTXs    chan types.SignedTx
 
-	raftStorage *raft.MemoryStorage
 	//Lock *sync.RWMutex
 
 	logger *zap.SugaredLogger
@@ -76,8 +74,7 @@ func New(opts params.Options) (*Node, error) {
 		bc:     nil,
 		logger: opts.Logger,
 		knownPeers: knownPeers{
-			peers: makeDefaultTrustedPeers(),
-			lock:  new(sync.RWMutex),
+			lock: new(sync.RWMutex),
 		},
 		pendingState:  newPendingState(),
 		newSyncTXs:    make(chan types.SignedTx),
