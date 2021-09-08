@@ -1,9 +1,10 @@
+![GitHub](https://img.shields.io/github/license/rovergulf/rbn)
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/rovergulf/rbn)
 ![GitHub tag (latest SemVer)](https://img.shields.io/github/v/tag/rovergulf/rbn)
 
 ## Rovergulf BlockChain Network
 
-[RBN](https://chain.rovergulf.net) - BlockChain algorithm implemented by Rovergulf Engineers team based on [Etherium SDK](https://github.com/ethereum/go-ethereum)
+[RBN](https://chain.rovergulf.net) - BlockChain algorithm implemented by [Rovergulf Engineers](https://rovergulf.net) team based on [Etherium SDK](https://github.com/ethereum/go-ethereum)
 
 ### Information
 - Documentation: [RBN Docs](https://chain.rovergulf.net/docs)
@@ -58,17 +59,25 @@ rbn node run --help
 ```
 
 ## Manage accounts
+
+
+### List keystore accounts
+If you run node without using wallets manager, it will automatically allocate a new one, place it to keystore,  
+and you will be able to import that account passphrase using node admin API
 ```shell
-# list node accounts
-# if you run node without your eth key,
-rbn wallets list
+rbn wallets list 
 ```
 
 ## Coins
 
 ### Rovergulf Coins
 
-An extra reward for platform achievements (for a [swap](https://swap.rovergulf.net) platform) and new block validations
+An extra reward for platform achievements and new block validations
+
+### Consensus
+
+Read more about Rovergulf Smart Chain algorithm in [documentation](https://chain.rovergulf.net/docs/nether)  
+Short representation of it can be found in [consensus/README.md](consensus/README.md)
 
 ---
 

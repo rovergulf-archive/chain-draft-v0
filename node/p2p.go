@@ -68,10 +68,7 @@ func (n *Node) getServerProtocols() []p2p.Protocol {
 			n.logger.Infow("New peer", "id", peer.id)
 			return n.handlePeer(peer)
 		},
-		NodeInfo: func() interface{} {
-			n.logger.Info("protocol node info")
-			return n.Info()
-		},
+		NodeInfo: n.Info,
 		//PeerInfo: func(id enode.ID) interface{} {
 		//	n.logger.Infof("protocol enode id: %s", id.String())
 		//	return n.metadata
@@ -243,6 +240,10 @@ func (n *Node) Info() interface{} {
 	}{
 		atomic.LoadInt64(&n.received),
 	}
+}
+
+func (n *Node) PeerInfo(id enode.ID) interface{} {
+	return nil
 }
 
 func nilPeerHandler(ctx context.Context, payload []byte) (*CallResult, error) {

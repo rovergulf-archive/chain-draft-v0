@@ -18,6 +18,7 @@ All notable changes to this project will be documented in this file.
 ## 8 Sep 2021
 
 ### Added
+- GitHub actions Go fmt and vet checks (tests would be added as better design appears)
 - new p2p handling templates based on Etherium `p2p` 
 
 ### Changed
