@@ -108,27 +108,22 @@ func (n *Node) WalkRoutes(w http.ResponseWriter, r *http.Request) {
 
 		pathTemplate, err := route.GetPathTemplate()
 		if err == nil {
-			//h.Logger.Debug("ROUTE: ", pathTemplate)
 			res["route"] = pathTemplate
 		}
 		pathRegexp, err := route.GetPathRegexp()
 		if err == nil {
-			//h.Logger.Debug("Path regexp: ", pathRegexp)
 			res["regexp"] = pathRegexp
 		}
 		queriesTemplates, err := route.GetQueriesTemplates()
 		if err == nil {
-			//h.Logger.Debug("Queries templates: ", strings.Join(queriesTemplates, ","))
 			res["queries_templates"] = strings.Join(queriesTemplates, ",")
 		}
 		queriesRegexps, err := route.GetQueriesRegexp()
 		if err == nil {
-			//h.Logger.Debug("Queries regexps: ", strings.Join(queriesRegexps, ","))
 			res["queries_regexps"] = strings.Join(queriesRegexps, ",")
 		}
 		methods, err := route.GetMethods()
 		if err == nil {
-			//h.Logger.Debug("Methods: ", strings.Join(methods, ","))
 			res["methods"] = methods
 		}
 
@@ -137,6 +132,8 @@ func (n *Node) WalkRoutes(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		n.logger.Error(err)
+		n.httpResponse(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	n.httpResponse(w, results)
@@ -147,11 +144,10 @@ func (n *Node) DiscoverMetrics(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	metricsUrl := fmt.Sprintf("%s/metrics", n.metadata.HttpApiAddress())
+	metricsUrl := fmt.Sprintf("%s/metrics", n.HttpApiAddress())
 	req, err := http.Get(metricsUrl)
 	if err != nil {
 		n.logger.Errorf("Unable to send request to prometheus metrics: %s", err)
-		w.WriteHeader(http.StatusInternalServerError)
 		n.httpResponse(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -183,4 +179,9 @@ func (n *Node) healthCheck(w http.ResponseWriter, r *http.Request) {
 		"http":        fmt.Sprintf("%s:%s", viper.GetString("http.addr"), viper.GetString("http.port")),
 		"p2p":         fmt.Sprintf("%s:%s", viper.GetString("node.addr"), viper.GetString("node.port")),
 	})
+}
+
+// HttpApiAddress returns full API server URL
+func (n *Node) HttpApiAddress() string {
+	return fmt.Sprintf("%s://%s", viper.GetString("http.addr"), viper.GetString("http.port"))
 }

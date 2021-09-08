@@ -107,11 +107,11 @@ func (n *Node) genRewardTxs(b *types.Block) ([]*types.SignedTx, error) {
 		peer := peers[addr]
 
 		amount := perPeer
-		if peer.Account == b.Coinbase {
+		if peer.account == b.Coinbase {
 			amount += params.NetherLimit
 		}
 
-		tx, err := types.NewTransaction(common.HexToAddress(""), peer.Account, amount, 0, types.TxRewardData)
+		tx, err := types.NewTransaction(common.HexToAddress(""), peer.account, amount, 0, types.TxRewardData)
 		if err != nil {
 			return nil, err
 		}

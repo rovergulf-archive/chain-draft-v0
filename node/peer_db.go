@@ -6,24 +6,22 @@ import (
 )
 
 // addPeer saves new peer to node storage
-func (n *Node) addDbPeer(peer PeerNode) error {
-	n.logger.Info("n.addPeer", peer)
-
+func (n *Node) addDbPeer(ctx context.Context, peer PeerNode) error {
 	pn, err := peer.Serialize()
 	if err != nil {
 		return err
 	}
 
-	key := append(peerPrefix, peer.Account.Bytes()...)
+	key := append(peerPrefix, []byte(peer.id)...)
 	return n.db.Update(func(txn *badger.Txn) error {
 		return txn.Set(key, pn)
 	})
 }
 
 // removePeer deletes peer from node storage
-func (n *Node) removeDbPeer(peer PeerNode) error {
+func (n *Node) removeDbPeer(ctx context.Context, peer PeerNode) error {
 	return n.db.Update(func(txn *badger.Txn) error {
-		key := append(peerPrefix, peer.Account.Bytes()...)
+		key := append(peerPrefix, []byte(peer.id)...)
 		return txn.Delete(key)
 	})
 }

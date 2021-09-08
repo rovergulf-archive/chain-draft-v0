@@ -4,26 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
+## 9 Sep 2021
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Removed
+
+
 ## 8 Sep 2021
 
 ### Added
+- new p2p handling templates based on Etherium `p2p` 
 
 ### Changed
+- reduced gRPC and protobuf usage
 
 ### Fixed
 
 ### Removed
-
-
-## 7 Sep 2021
-
-### Added
-
-### Changed
-
-### Fixed
-
-### Removed
+- gRPC client and server interfaces
 
 
 ## 6 Sep 2021

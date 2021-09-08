@@ -2,8 +2,8 @@ package client
 
 import (
 	"context"
-	"github.com/rovergulf/rbn/node/pb"
 	"github.com/rovergulf/rbn/pkg/traceutil"
+	"github.com/rovergulf/rbn/rpc"
 	"go.uber.org/zap"
 )
 
@@ -29,7 +29,7 @@ func (c *NetherClient) Stop() {
 	// TBD
 }
 
-func (c *NetherClient) MakeCall(ctx context.Context, cmd pb.Command, ent pb.Entity, req []byte) (*pb.CallResponse, error) {
+func (c *NetherClient) MakeCall(ctx context.Context, req *rpc.ApiRequest) (*rpc.ApiResponse, error) {
 
 	return nil, nil
 }

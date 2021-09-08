@@ -12,8 +12,8 @@ import (
 )
 
 type dgraphDb struct {
-	client *dgo.Dgraph
-	conn   *grpc.ClientConn
+	*dgo.Dgraph
+	conn *grpc.ClientConn
 
 	logger *zap.SugaredLogger
 	tracer opentracing.Tracer
@@ -33,12 +33,22 @@ func NewClient() (*dgo.Dgraph, error) {
 	// setting up the dgraph cluster.
 	d, err := grpc.Dial(viper.GetString("dgraph.host"), grpc.WithInsecure())
 	if err != nil {
+		// log error
 		return nil, err
 	}
+
+	// TODO setup tls (if specified? or it must be required?)
+	// tlsConf, err := setupTLS()
+	// if err != nil {}
 
 	return dgo.NewDgraphClient(
 		api.NewDgraphClient(d),
 	), nil
+}
+
+// setupTLS runs TLS connection with dgo.Client
+func setupTLS() {
+	// TBD
 }
 
 type chainDb struct {
@@ -60,7 +70,7 @@ func newDgraphClient(ctx context.Context, opts params.Options) (*dgraphDb, error
 	}
 
 	db := &dgraphDb{
-		client: d,
+		Dgraph: d,
 		logger: opts.Logger,
 		tracer: opts.Tracer,
 	}

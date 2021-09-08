@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"crypto/tls"
 	"fmt"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/rovergulf/rbn/core"
@@ -134,8 +133,6 @@ func setConfigDefaults() {
 	viper.SetDefault("metrics", true)
 	viper.SetDefault(traceutil.JaegerTraceConfigKey, os.Getenv("JAEGER_TRACE"))
 
-	viper.SetDefault("node_id", "")
-
 	// storage
 	viper.SetDefault("db", "")
 	viper.SetDefault("data_dir", "tmp")
@@ -150,19 +147,8 @@ func setConfigDefaults() {
 	//viper.SetDefault("dgraph.user", "")
 	//viper.SetDefault("dgraph.password", "")
 
-	// ssl configuration
-	viper.SetDefault("ssl.enabled", false)
-	viper.SetDefault("ssl.email", "")
-	viper.SetDefault("ssl.ca", "")
-	viper.SetDefault("ssl.cert", "")
-	viper.SetDefault("ssl.key", "")
-	viper.SetDefault("ssl.verify", false)
-	viper.SetDefault("ssl.mode", tls.NoClientCert)
-
 	// chain network setup
 	viper.SetDefault("network.id", params.MainNetworkId)
-	viper.SetDefault("network.addr", "127.0.0.1:9420")
-	viper.SetDefault("network.discovery", "swarm.rovergulf.net:443")
 
 	// p2p settings
 	viper.SetDefault("node.max_peers", 256)
@@ -177,6 +163,13 @@ func setConfigDefaults() {
 	viper.SetDefault("http.disabled", false)
 	viper.SetDefault("http.addr", "127.0.0.1")
 	viper.SetDefault("http.port", 9469)
+	viper.SetDefault("http.dial_timeout", 30)
+	viper.SetDefault("http.read_timeout", 30)
+	viper.SetDefault("http.write_timeout", 30)
+	viper.SetDefault("http.ssl.enabled", false)
+	viper.SetDefault("http.ssl.cert", "")
+	viper.SetDefault("http.ssl.key", "")
+	viper.SetDefault("http.ssl.verify", false)
 
 	// TBD
 	// Cache

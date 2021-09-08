@@ -1,14 +1,25 @@
 package node
 
-type StatusRes struct {
-	LastHash   string `json:"block_hash,omitempty" yaml:"last_hash,omitempty"`
-	Number     uint64 `json:"chain_length,omitempty" yaml:"chain_length,omitempty"`
-	KnownPeers int    `json:"peers_known,omitempty" yaml:"known_peers,omitempty"`
-	PendingTXs int    `json:"pending_txs,omitempty" yaml:"pending_t_xs,omitempty"`
+type CallRequest struct {
+	Code uint64 `json:"code" yaml:"code"`
+	Data []byte `json:"data" yaml:"data"`
+	From string `json:"from" yaml:"from"` //
+}
+
+// CallResult represents standard
+type CallResult struct {
+	Code uint64 `json:"code" yaml:"code"`
+	Data []byte `json:"data" yaml:"data"`
+}
+
+type StatusResult struct {
+	Head      string `json:"head" yaml:"head"`
+	Genesis   string `json:"genesis"  yaml:"genesis"`
+	NetworkId string `json:"network_id" yaml:"network_id"`
+	Uptime    int64  `json:"uptime" yaml:"uptime"`
 }
 
 type JoinPeerRequest struct {
-	From PeerNode `json:"from" yaml:"from"`
 }
 
 type JoinPeerResult struct {
@@ -16,26 +27,21 @@ type JoinPeerResult struct {
 }
 
 type VersionSyncReq struct {
-	From PeerNode `json:"from" yaml:"from"`
 }
 
 type VersionSyncResult struct {
-	From PeerNode `json:"from" yaml:"from"`
 }
 
 type BalanceSyncReq struct {
-	From PeerNode `json:"from" yaml:"from"`
 }
 
 type BalanceSyncResult struct {
-	From PeerNode `json:"from" yaml:"from"`
 }
 
 type TxAddRequest struct {
-	Peer    PeerNode `json:"peer" yaml:"peer"`
-	From    string   `json:"from" yaml:"from"`
-	FromPwd string   `json:"from_pwd" yaml:"from_pwd"`
-	To      string   `json:"to" yaml:"to"`
-	Value   float64  `json:"value" yaml:"value"`
-	Data    []byte   `json:"data" yaml:"data"`
+	From    string  `json:"from" yaml:"from"`
+	FromPwd string  `json:"from_pwd" yaml:"from_pwd"`
+	To      string  `json:"to" yaml:"to"`
+	Value   float64 `json:"value" yaml:"value"`
+	Data    []byte  `json:"data" yaml:"data"`
 }

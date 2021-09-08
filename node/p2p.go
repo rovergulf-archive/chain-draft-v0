@@ -6,8 +6,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/opentracing/opentracing-go"
 	"github.com/rovergulf/rbn/params"
 	"github.com/spf13/viper"
+	"io/ioutil"
+	"sync/atomic"
 )
 
 func (n *Node) newEthP2pServer(ctx context.Context) error {
@@ -54,15 +57,21 @@ func (n *Node) getServerProtocols() []p2p.Protocol {
 	protos = append(protos, p2p.Protocol{
 		Name:    "rbn",
 		Version: 1,
-		Length:  1,
-		Run: func(peer *p2p.Peer, rw p2p.MsgReadWriter) error {
-			n.logger.Infow("Run peer proto", "id", peer.ID(), "local_addr", peer.LocalAddr())
-			return nil
+		Length:  2,
+		Run: func(p *p2p.Peer, rw p2p.MsgReadWriter) error {
+			peer := NewPeer(p, rw)
+			defer peer.Close()
+
+			go n.announceTx(peer)
+			go n.announceBlocks(peer)
+
+			n.logger.Infow("New peer", "id", peer.id)
+			return n.handlePeer(peer)
 		},
-		//NodeInfo: func() interface{} {
-		//	n.logger.Info("protocol node info")
-		//	return n.srv.NodeInfo()
-		//},
+		NodeInfo: func() interface{} {
+			n.logger.Info("protocol node info")
+			return n.Info()
+		},
 		//PeerInfo: func(id enode.ID) interface{} {
 		//	n.logger.Infof("protocol enode id: %s", id.String())
 		//	return n.metadata
@@ -76,4 +85,166 @@ func (n *Node) getServerProtocols() []p2p.Protocol {
 func (n *Node) connectPeers(ctx context.Context) error {
 
 	return nil
+}
+
+const (
+	StatusMsg = iota
+	NewBlockHashesMsg
+	TransactionsMsg
+	GetBlockHeadersMsg
+	BlockHeadersMsg
+	GetBlockBodiesMsg
+	BlockBodiesMsg
+	NewBlockMsg
+	GetNodeDataMsg
+	NodeDataMsg
+	GetReceiptsMsg
+	ReceiptsMsg
+	NewPooledTransactionHashesMsg
+	GetPooledTransactionsMsg
+	PooledTransactionsMsg
+)
+
+const (
+	pingMsgCode = iota
+	pongMsgCode
+)
+
+func (n *Node) handlePeer(p *Peer) error {
+	ctx := context.Background()
+
+	var span opentracing.Span
+	if n.tracer != nil {
+		span = n.tracer.StartSpan("handle_peer")
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
+
+	msg, err := p.rw.ReadMsg()
+	if err != nil {
+		return err
+	}
+
+	if span != nil {
+		span.SetTag("msg_code", msg.Code)
+		span.SetBaggageItem("ack", "true")
+	}
+
+	payload, err := ioutil.ReadAll(msg.Payload)
+	if err != nil {
+		return err
+	}
+
+	if span != nil {
+		span.SetBaggageItem("read", "true")
+	}
+
+	var res *CallResult
+	switch msg.Code {
+	case StatusMsg:
+		if res, err = n.handleStatusMsg(ctx, payload); err != nil {
+			return err
+		}
+	case NewBlockHashesMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case TransactionsMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case GetBlockHeadersMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case BlockHeadersMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case GetBlockBodiesMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case BlockBodiesMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case NewBlockMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case GetNodeDataMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case NodeDataMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case GetReceiptsMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case ReceiptsMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case NewPooledTransactionHashesMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case GetPooledTransactionsMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case PooledTransactionsMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("invalid message code")
+	}
+
+	if res != nil {
+		if err := p2p.Send(p.rw, res.Code, res.Data); err != nil {
+			n.logger.Errorw("Unable to send p2p message", "err", err)
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (n *Node) announceBlocks(p *Peer) {
+	for {
+		select {
+		case nb := <-n.blockBroadcast:
+			n.logger.Infow("new broadcast block", "hash", nb.BlockHash)
+		case ab := <-n.blockAnnounce:
+			n.logger.Infow("new announce block", "hash", ab.BlockHash)
+		}
+	}
+}
+
+func (n *Node) announceTx(p *Peer) {
+	for {
+		select {
+		case btx := <-n.txBroadcast:
+			n.logger.Infow("new broadcast block", "txs count", len(btx))
+		case atx := <-n.txAnnounce:
+			n.logger.Infow("new announce block", "txs count", len(atx))
+		}
+	}
+}
+
+func (n *Node) Info() interface{} {
+	return struct {
+		Received int64 `json:"received"`
+	}{
+		atomic.LoadInt64(&n.received),
+	}
+}
+
+func nilPeerHandler(ctx context.Context, payload []byte) (*CallResult, error) {
+	return nil, fmt.Errorf("not implemented")
 }

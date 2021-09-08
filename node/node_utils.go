@@ -10,7 +10,7 @@ func (n *Node) IsKnownPeer(peer PeerNode) bool {
 }
 
 func (n *Node) removeKnownPeer(ctx context.Context, peer PeerNode) error {
-	if err := n.removeDbPeer(peer); err != nil {
+	if err := n.removeDbPeer(ctx, peer); err != nil {
 		return err
 	}
 

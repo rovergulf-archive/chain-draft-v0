@@ -1,6 +1,8 @@
 package database
 
-import "context"
+import (
+	"context"
+)
 
 const (
 	Badger = "badger" // idk, pretty sure etcd, bbolt or consul would fit as well

@@ -73,9 +73,9 @@ func (n *Node) nodeInfo(w http.ResponseWriter, r *http.Request) {
 	nLsm, nVlog := n.db.Size()     // node db size
 
 	n.httpResponse(w, map[string]interface{}{
-		"node_info":   n.srv.NodeInfo(),
-		"lash_hash":   lb.BlockHeader.BlockHash.Hex(),
-		"pending_txs": n.pendingState.pendingTxLen(),
+		"node_info": n.srv.NodeInfo(),
+		"lash_hash": lb.BlockHeader.BlockHash.Hex(),
+		//"pending_txs": n.pendingState.pendingTxLen(),
 		"peers":       n.srv.PeerCount(),
 		"in_gen_race": n.inGenRace,
 		"db_size": map[string]int64{

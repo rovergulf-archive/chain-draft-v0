@@ -14,6 +14,8 @@
 
 ### Simple source build
 ```shell
+go build -o rbn cmd/cli/main.go
+
 ./rbn help
 
 # or just
@@ -27,8 +29,7 @@ go run cmd/cli/main.go help
 ### From source
 ```shell
 git clone github.com/rovergulf/rbn
-cd rbn
-go build
+wget dl.rovergulf.net/rbn:$RELEASE # TBD platform support 
 ```
 
 ### Containers
@@ -54,6 +55,13 @@ rbn node run
 rbn node run --help
 
 # TBD: sync modes, etc
+```
+
+## Manage accounts
+```shell
+# list node accounts
+# if you run node without your eth key,
+rbn wallets list
 ```
 
 ## Coins

@@ -2,15 +2,9 @@ package commands
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/console/prompt"
-	"github.com/rovergulf/rbn/client"
-	"github.com/rovergulf/rbn/node"
-	"github.com/rovergulf/rbn/node/pb"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 func txCmd() *cobra.Command {
@@ -59,6 +53,7 @@ func txGetCmd() *cobra.Command {
 	return txGetCmd
 }
 
+// TO BE REWORKED
 // txSendCmd represents the send command
 func txSendCmd() *cobra.Command {
 	var txSendCmd = &cobra.Command{
@@ -72,7 +67,8 @@ func txSendCmd() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx := context.Background()
+			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
 			//data, _ := cmd.Flags().GetBool("data")
@@ -93,36 +89,36 @@ func txSendCmd() *cobra.Command {
 				return fmt.Errorf("amount must be more than 0")
 			}
 
-			auth, err := prompt.Stdin.PromptPassword("Enter passphrase to decrypt wallet:")
-			if err != nil {
-				return err
-			}
+			//auth, err := prompt.Stdin.PromptPassword("Enter passphrase to decrypt wallet:")
+			//if err != nil {
+			//	return err
+			//}
 
-			c, err := client.NewClient(ctx, logger, viper.GetString("network.addr"))
-			if err != nil {
-				return err
-			}
-			defer c.Stop()
+			//c, err := client.NewClient(ctx, logger, viper.GetString("network.addr"))
+			//if err != nil {
+			//	return err
+			//}
+			//defer c.Stop()
+			//
+			//addTxReq := node.TxAddRequest{
+			//	From:    from,
+			//	FromPwd: auth,
+			//	To:      to,
+			//	Value:   amount,
+			//	Data:    nil,
+			//}
+			//
+			//callData, err := json.Marshal(addTxReq)
+			//if err != nil {
+			//	return err
+			//}
+			//
+			//res, err := c.MakeCall(ctx, nil)
+			//if err != nil {
+			//	return err
+			//}
 
-			addTxReq := node.TxAddRequest{
-				From:    from,
-				FromPwd: auth,
-				To:      to,
-				Value:   amount,
-				Data:    nil,
-			}
-
-			callData, err := json.Marshal(addTxReq)
-			if err != nil {
-				return err
-			}
-
-			res, err := c.MakeCall(ctx, pb.Command_Add, pb.Entity_Transaction, callData)
-			if err != nil {
-				return err
-			}
-
-			return writeOutput(cmd, res)
+			return writeOutput(cmd, "not implemented")
 		},
 		TraverseChildren: true,
 	}
