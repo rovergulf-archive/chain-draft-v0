@@ -22,12 +22,11 @@ All notable changes to this project will be documented in this file.
 - new p2p handling templates based on Etherium `p2p` 
 
 ### Changed
-- reduced gRPC and protobuf usage
 
 ### Fixed
 
 ### Removed
-- gRPC client and server interfaces
+- gRPC and protobuf usage
 
 
 ## 6 Sep 2021
