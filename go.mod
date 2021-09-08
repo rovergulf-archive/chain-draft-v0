@@ -28,7 +28,7 @@ require (
 	github.com/libp2p/go-libp2p-pubsub v0.5.4
 	github.com/libp2p/go-libp2p-tls v0.1.3
 	github.com/libp2p/go-libp2p-yamux v0.5.4
-	github.com/libp2p/go-tcp-transport v0.2.7
+	github.com/libp2p/go-tcp-transport v0.2.8
 	github.com/libp2p/go-ws-transport v0.4.0
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
