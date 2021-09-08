@@ -39,13 +39,13 @@ func (t *jaegerTracer) CollectorUrl() string {
 func NewTracerFromViperConfig() (Tracer, error) {
 	jaegerAddr := viper.GetString(JaegerTraceConfigKey)
 	if len(jaegerAddr) > 0 {
-		return NewTracer(jaegerAddr)
+		return NewTracer("rbn", jaegerAddr)
 	} else {
 		return nil, ErrCollectorUrlNotSpecified
 	}
 }
 
-func NewTracer(address string) (Tracer, error) {
+func NewTracer(svcName, address string) (Tracer, error) {
 	metrics := prometheus.New()
 
 	traceTransport, err := jaeger.NewUDPTransport(address, 0)
@@ -54,7 +54,7 @@ func NewTracer(address string) (Tracer, error) {
 	}
 
 	tracer, closer, err := config.Configuration{
-		ServiceName: "rbn",
+		ServiceName: svcName,
 	}.NewTracer(
 		config.Sampler(jaeger.NewConstSampler(true)),
 		config.Reporter(jaeger.NewRemoteReporter(

@@ -3,139 +3,249 @@ package node
 import (
 	"context"
 	"fmt"
-	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/routing"
-	kaddht "github.com/libp2p/go-libp2p-kad-dht"
-	mplex "github.com/libp2p/go-libp2p-mplex"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	tls "github.com/libp2p/go-libp2p-tls"
-	yamux "github.com/libp2p/go-libp2p-yamux"
-	"github.com/libp2p/go-libp2p/p2p/discovery"
-	"github.com/libp2p/go-tcp-transport"
-	websocket "github.com/libp2p/go-ws-transport"
-	"github.com/multiformats/go-multiaddr"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/p2p"
+	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/opentracing/opentracing-go"
+	"github.com/rovergulf/rbn/params"
 	"github.com/spf13/viper"
-	"go.uber.org/zap"
-	"time"
+	"io/ioutil"
+	"sync/atomic"
 )
 
-type mdnsNotifee struct {
-	logger *zap.SugaredLogger
-	h      host.Host
-	ctx    context.Context
-}
-
-func (m *mdnsNotifee) HandlePeerFound(pi peer.AddrInfo) {
-	if err := m.h.Connect(m.ctx, pi); err != nil {
-		m.logger.Errorw("Unable to join peer", "peer_id", pi.ID, "err", err)
+func (n *Node) newEthP2pServer(ctx context.Context) error {
+	listenAddr := fmt.Sprintf("%s:%s", viper.GetString("node.addr"), viper.GetString("node.port"))
+	config := p2p.Config{
+		Name:           common.MakeName("Nether Node", params.Version),
+		MaxPeers:       256,
+		ListenAddr:     listenAddr,
+		DiscoveryV5:    true,
+		PrivateKey:     n.account.GetKey().PrivateKey,
+		BootstrapNodes: mainNetBootNodes(),
+		Protocols:      n.getServerProtocols(),
 	}
+
+	n.srv = &p2p.Server{
+		Config: config,
+	}
+
+	return n.srv.Start()
 }
 
-func (n *Node) PrepareP2pPeer(ctx context.Context) (host.Host, error) {
-	transports := libp2p.ChainOptions(
-		libp2p.Transport(tcp.NewTCPTransport), // this refers to multiaddrs usage
-		libp2p.Transport(websocket.New),       // same, as one above
-	)
+func (n *Node) peerFunc(peer *p2p.Peer) {
+	n.logger.Infow("peerFunc", "id", peer.ID(), "info", peer.Info())
+}
 
-	muxers := libp2p.ChainOptions(
-		libp2p.Muxer("/yamux/1.0.0", yamux.DefaultTransport),
-		libp2p.Muxer("/mplex/6.7.0", mplex.DefaultTransport),
-	)
+func (n *Node) newEthP2pPeer(ctx context.Context) error {
+	return nil
+}
 
-	security := libp2p.Security(tls.ID, tls.New)
+func (n *Node) getBootstrapNodes() []*enode.Node {
+	var nodes []*enode.Node
+	return nodes
+}
 
-	listenAddrs := libp2p.ListenAddrStrings(
-		"/ip4/0.0.0.0/tcp/0",
-		"/ip4/0.0.0.0/tcp/0/ws",
-	)
+func (n *Node) getTrustedNodes() []*enode.Node {
+	var nodes []*enode.Node
+	// temp second node
 
-	newDHT := func(h host.Host) (routing.PeerRouting, error) {
-		var err error
-		if n.dht, err = kaddht.New(ctx, h); err != nil {
-			n.logger.Errorf("Unable to create dht: %s", err)
-			return nil, err
-		} else {
-			n.logger.Debugw("New DHT ipfs peer", "peer_id", n.dht.PeerID())
+	return nodes
+}
+
+func (n *Node) getServerProtocols() []p2p.Protocol {
+	var protos []p2p.Protocol
+	protos = append(protos, p2p.Protocol{
+		Name:    "rbn",
+		Version: 1,
+		Length:  2,
+		Run: func(p *p2p.Peer, rw p2p.MsgReadWriter) error {
+			peer := NewPeer(p, rw)
+			defer peer.Close()
+
+			go n.announceTx(peer)
+			go n.announceBlocks(peer)
+
+			n.logger.Infow("New peer", "id", peer.id)
+			return n.handlePeer(peer)
+		},
+		NodeInfo: n.Info,
+		//PeerInfo: func(id enode.ID) interface{} {
+		//	n.logger.Infof("protocol enode id: %s", id.String())
+		//	return n.metadata
+		//},
+		DialCandidates: nil,
+		Attributes:     nil,
+	})
+	return protos
+}
+
+func (n *Node) connectPeers(ctx context.Context) error {
+
+	return nil
+}
+
+const (
+	StatusMsg = iota
+	NewBlockHashesMsg
+	TransactionsMsg
+	GetBlockHeadersMsg
+	BlockHeadersMsg
+	GetBlockBodiesMsg
+	BlockBodiesMsg
+	NewBlockMsg
+	GetNodeDataMsg
+	NodeDataMsg
+	GetReceiptsMsg
+	ReceiptsMsg
+	NewPooledTransactionHashesMsg
+	GetPooledTransactionsMsg
+	PooledTransactionsMsg
+)
+
+const (
+	pingMsgCode = iota
+	pongMsgCode
+)
+
+func (n *Node) handlePeer(p *Peer) error {
+	ctx := context.Background()
+
+	var span opentracing.Span
+	if n.tracer != nil {
+		span = n.tracer.StartSpan("handle_peer")
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
+
+	msg, err := p.rw.ReadMsg()
+	if err != nil {
+		return err
+	}
+
+	if span != nil {
+		span.SetTag("msg_code", msg.Code)
+		span.SetBaggageItem("ack", "true")
+	}
+
+	payload, err := ioutil.ReadAll(msg.Payload)
+	if err != nil {
+		return err
+	}
+
+	if span != nil {
+		span.SetBaggageItem("read", "true")
+	}
+
+	var res *CallResult
+	switch msg.Code {
+	case StatusMsg:
+		if res, err = n.handleStatusMsg(ctx, payload); err != nil {
+			return err
 		}
-		return n.dht, nil
-	}
-	router := libp2p.Routing(newDHT)
-
-	h, err := libp2p.New(
-		ctx,
-		transports,
-		listenAddrs,
-		muxers,
-		security,
-		router,
-	)
-	if err != nil {
-		n.logger.Errorf("Unable to create p2p host: %s", err)
-		return nil, err
-	}
-
-	return h, nil
-}
-
-// PrepareSubs initializes and runs main topic subscription
-func (n *Node) PrepareSubs(ctx context.Context, channel string) error {
-	ps, err := pubsub.NewGossipSub(ctx, n.host)
-	if err != nil {
-		n.logger.Errorf("Unable to create gossip sub: %s", err)
-		return err
-	}
-
-	n.mainTopic, err = ps.Join(channel)
-	if err != nil {
-		n.logger.Errorf("Unable to join topic '%s': %s", channel, err)
-		return err
-	}
-
-	n.mainSub, err = n.mainTopic.Subscribe()
-	if err != nil {
-		n.logger.Errorf("Unable to subscribe to '%s': %s", channel, err)
-		return err
-	}
-
-	return nil
-}
-
-// RunP2pServer runs peer node
-func (n *Node) RunP2pServer(ctx context.Context) error {
-
-	for _, addr := range n.host.Addrs() {
-		n.logger.Debugf("Listening on '%s'", addr)
-	}
-
-	mAddr := fmt.Sprintf("/ip4/%s/tcp/%s/p2p/QmWjz6xb8v9K4KnYEwP5Yk75k5mMBCehzWFLCvvQpYxF3d",
-		viper.GetString("node.addr"), viper.GetString("node.port"))
-	targetAddr, err := multiaddr.NewMultiaddr(mAddr)
-	if err != nil {
-		n.logger.Errorf("Failed to connect target: %s", err)
-		return err
-	}
-
-	targetInfo, err := peer.AddrInfoFromP2pAddr(targetAddr)
-	if err != nil {
-		n.logger.Errorf("Unable to get target info: %s", err)
-		return err
+	case NewBlockHashesMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case TransactionsMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case GetBlockHeadersMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case BlockHeadersMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case GetBlockBodiesMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case BlockBodiesMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case NewBlockMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case GetNodeDataMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case NodeDataMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case GetReceiptsMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case ReceiptsMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case NewPooledTransactionHashesMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case GetPooledTransactionsMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	case PooledTransactionsMsg:
+		if res, err = nilPeerHandler(ctx, payload); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("invalid message code")
 	}
 
-	n.logger.Infof("Connected to '%s'", targetInfo.ID)
-
-	mdns, err := discovery.NewMdnsService(ctx, n.host, 5*time.Second, "")
-	if err != nil {
-		n.logger.Errorf("Unable to create new mdns service: %s", err)
-		return err
-	}
-	mdns.RegisterNotifee(&mdnsNotifee{h: n.host, ctx: ctx})
-
-	if err := n.dht.Bootstrap(ctx); err != nil {
-		n.logger.Errorf("Failed to bootstrap dht: %s", err)
-		return err
+	if res != nil {
+		if err := p2p.Send(p.rw, res.Code, res.Data); err != nil {
+			n.logger.Errorw("Unable to send p2p message", "err", err)
+			return err
+		}
 	}
 
 	return nil
+}
+
+func (n *Node) announceBlocks(p *Peer) {
+	for {
+		select {
+		case nb := <-n.blockBroadcast:
+			n.logger.Infow("new broadcast block", "hash", nb.BlockHash)
+		case ab := <-n.blockAnnounce:
+			n.logger.Infow("new announce block", "hash", ab.BlockHash)
+		}
+	}
+}
+
+func (n *Node) announceTx(p *Peer) {
+	for {
+		select {
+		case btx := <-n.txBroadcast:
+			n.logger.Infow("new broadcast block", "txs count", len(btx))
+		case atx := <-n.txAnnounce:
+			n.logger.Infow("new announce block", "txs count", len(atx))
+		}
+	}
+}
+
+func (n *Node) Info() interface{} {
+	return struct {
+		Received int64 `json:"received"`
+	}{
+		atomic.LoadInt64(&n.received),
+	}
+}
+
+func (n *Node) PeerInfo(id enode.ID) interface{} {
+	return nil
+}
+
+func nilPeerHandler(ctx context.Context, payload []byte) (*CallResult, error) {
+	return nil, fmt.Errorf("not implemented")
 }

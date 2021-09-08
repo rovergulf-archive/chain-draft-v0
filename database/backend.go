@@ -1,6 +1,8 @@
 package database
 
-import "context"
+import (
+	"context"
+)
 
 const (
 	Badger = "badger" // idk, pretty sure etcd, bbolt or consul would fit as well
@@ -19,18 +21,18 @@ type Config struct {
 
 // lifecycle handles start/stop signals for db connection/file read
 type lifecycle interface {
-	//Run() error
+	Run() error
 	Shutdown()
 }
 
-type KvStorage interface {
+type kvStorage interface {
 	Get(ctx context.Context, key []byte) ([]byte, error)
 	Put(ctx context.Context, key []byte, data []byte) error
 	Delete(ctx context.Context, key []byte) error
 	List(ctx context.Context, prefix []byte) ([][]byte, error)
 }
 
-type txFunc func(txn KvStorage) error
+type txFunc func(txn kvStorage) error
 
 type kvTx interface {
 	View(ctx context.Context, txFunc txFunc) error
@@ -39,5 +41,6 @@ type kvTx interface {
 
 type Backend interface {
 	lifecycle
-	KvStorage
+	kvStorage
+	NewTx(ctx context.Context) kvTx
 }

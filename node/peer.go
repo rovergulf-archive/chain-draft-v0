@@ -5,13 +5,49 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/rovergulf/rbn/client"
+	"github.com/ethereum/go-ethereum/p2p"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/rovergulf/rbn/params"
 	"github.com/spf13/viper"
-	"strconv"
-	"strings"
+	"go.uber.org/zap"
 	"sync"
 )
+
+type Peer struct {
+	id      string
+	version string
+
+	peer *p2p.Peer
+	rw   p2p.MsgReadWriter
+
+	logger *zap.SugaredLogger
+}
+
+func NewPeer(peer *p2p.Peer, rw p2p.MsgReadWriter) *Peer {
+	p := &Peer{
+		id:   peer.ID().String(),
+		peer: peer,
+		rw:   rw,
+	}
+
+	return p
+}
+
+func (p *Peer) Close() {
+	p.peer.Disconnect(p2p.DiscQuitting)
+}
+
+func (p *Peer) ID() string {
+	return p.id
+}
+
+func (p *Peer) Version() string {
+	return p.version
+}
+
+func (p *Peer) Info() {
+
+}
 
 var (
 	peerPrefix = []byte("peers/")
@@ -74,28 +110,29 @@ const (
 	SyncModeFull    SyncMode = "full"    // sync full chain
 )
 
-// PeerNode represents distributed node network metadata
+// PeerNode represents distributed peer-node network metadata
 type PeerNode struct {
-	Ip      string         `json:"ip" yaml:"ip"`
-	Port    uint64         `json:"port" yaml:"port"`
-	Root    bool           `json:"root" yaml:"root"`
-	Account common.Address `json:"account" yaml:"account"`
+	account common.Address
 
 	syncMode SyncMode
 
 	// Whenever my node already established connection, sync with this Peer
 	connected bool
-	client    *client.NetherClient
+
+	id string
+
+	peer *p2p.Peer
+	rw   p2p.MsgReadWriter
 }
 
-func NewPeerNode(ip string, port uint64, address common.Address, mode SyncMode) PeerNode {
-	return PeerNode{
-		Ip:       ip,
-		Port:     port,
-		Root:     ip == DefaultNodeIP && port == DefaultNodePort,
-		Account:  address,
-		syncMode: mode,
+func NewPeerNode(peer *p2p.Peer, rw p2p.MsgReadWriter) PeerNode {
+	p := PeerNode{
+		id:   peer.ID().String(),
+		peer: peer,
+		rw:   rw,
 	}
+
+	return p
 }
 
 func (pn *PeerNode) SyncMode() string {
@@ -104,12 +141,17 @@ func (pn *PeerNode) SyncMode() string {
 
 // TcpAddress returns tcp node address
 func (pn *PeerNode) TcpAddress() string {
-	return fmt.Sprintf("%s:%d", pn.Ip, pn.Port)
+	return pn.peer.RemoteAddr().String()
+}
+
+// RemoteAddress returns peer remote url
+func (pn *PeerNode) RemoteAddress() string {
+	return pn.peer.RemoteAddr().String()
 }
 
 // ApiProtocol returns http protocol
 func (pn *PeerNode) ApiProtocol() string {
-	if pn.Port == HttpSSLPort {
+	if viper.GetInt("http.port") == HttpSSLPort {
 		return "https"
 	}
 
@@ -119,11 +161,6 @@ func (pn *PeerNode) ApiProtocol() string {
 // ApiAddress returns HTTP server listen address
 func (pn *PeerNode) ApiAddress() string {
 	return fmt.Sprintf("%s:%s", viper.GetString("http.addr"), viper.GetString("http.port"))
-}
-
-// HttpApiAddress returns full API server URL
-func (pn *PeerNode) HttpApiAddress() string {
-	return fmt.Sprintf("%s://%s", pn.ApiProtocol(), pn.ApiAddress())
 }
 
 func (pn *PeerNode) Serialize() ([]byte, error) {
@@ -142,44 +179,16 @@ func (pn *PeerNode) Deserialize(src []byte) error {
 	return decoder.Decode(pn)
 }
 
-// checks if peer is the treasurer node
-func isRootNode(peer PeerNode) bool {
-	if _, ok := params.RovergulfTreasurerAccounts[peer.TcpAddress()]; ok {
-		return ok
+// mainNetBootNodes returns the enode URLs of the P2P bootstrap nodes operated
+// by the Rovergulf Engineers running the V5 discovery protocol.
+func mainNetBootNodes() []*enode.Node {
+	nodes := make([]*enode.Node, len(params.MainNetBootNodes))
+	for i, url := range params.MainNetBootNodes {
+		var err error
+		nodes[i], err = enode.Parse(enode.ValidSchemes, url)
+		if err != nil {
+			panic("invalid node URL: " + err.Error())
+		}
 	}
-
-	return false
-}
-
-func collectPeerUrls(nodes map[string]PeerNode) []string {
-	var peers []string
-
-	for peer := range nodes {
-		node := nodes[peer]
-		peers = append(peers, node.TcpAddress())
-	}
-
-	return peers
-}
-
-func defaultPeer() PeerNode {
-	return PeerNode{
-		Ip:        DefaultNodeIP,
-		Port:      DefaultNodePort,
-		Root:      true,
-		Account:   common.HexToAddress("0x3c0b3b41a1e027d3E759612Af08844f1cca0DdE3"),
-		connected: false,
-		syncMode:  SyncModeFull,
-	}
-}
-
-func makeDefaultTrustedPeers() map[string]PeerNode {
-	peers := make(map[string]PeerNode)
-	for tcpAddr := range params.RovergulfTreasurerAccounts {
-		trustedNode := params.RovergulfTreasurerAccounts[tcpAddr]
-		addrParts := strings.Split(tcpAddr, ":")
-		port, _ := strconv.ParseUint(addrParts[1], 10, 64)
-		peers[tcpAddr] = NewPeerNode(addrParts[0], port, trustedNode, SyncModeFull)
-	}
-	return peers
+	return nodes
 }

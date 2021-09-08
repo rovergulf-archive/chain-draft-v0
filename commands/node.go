@@ -62,7 +62,7 @@ func nodeRunCmd() *cobra.Command {
 	bindViperFlag(nodeRunCmd, "http.addr", "http-addr")
 	nodeRunCmd.Flags().Int("http-port", 9469, "Node port would listen to accept Web API Requests")
 	bindViperFlag(nodeRunCmd, "http.port", "http-port")
-	// JSONRpc 2.0 – TBD
+	// JSONRpc 2.0 – TBD (??)
 	//nodeRunCmd.Flags().String("jrpc-addr", "127.0.0.1", "Node address would listen to")
 	//bindViperFlag(nodeRunCmd, "jrpc.addr", "jrpc-addr")
 	//nodeRunCmd.Flags().Int("jrpc-port", 9300, "Node port for JSON Rpc 2.0 Interface")
@@ -118,7 +118,8 @@ func nodeAccountDumpCmd() *cobra.Command {
 and prints out mnemonic passphrase to unlock it`,
 		PreRunE: prepareNode,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			//ctx, cancel := context.WithCancel(context.Background())
+			//ctx := context.Background()
+			//ctx, cancel := context.WithCancel(ctx)
 			//defer cancel()
 			defer localNode.Shutdown()
 
@@ -161,6 +162,8 @@ and sets it as node default`,
 			//ctx, cancel := context.WithCancel(context.Background())
 			//defer cancel()
 			defer localNode.Shutdown()
+
+			// TODO
 
 			return writeOutput(cmd, map[string]interface{}{
 				"address": "w.Address()",

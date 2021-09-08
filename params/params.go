@@ -8,6 +8,7 @@ import (
 )
 
 // Options represents configuration options for whole package
+// TODO deprecate and remove Options usage
 type Options struct {
 	DbFilePath      string `json:"db_file_path" yaml:"db_file_path"`
 	WalletsFilePath string `json:"wallets_file_path" yaml:"wallets_file_path"`
