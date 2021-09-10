@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/viper"
 	"io/ioutil"
 	"sync/atomic"
+	"time"
 )
 
 func (n *Node) newEthP2pServer(ctx context.Context) error {
@@ -66,7 +67,7 @@ func (n *Node) getServerProtocols() []p2p.Protocol {
 			go n.announceBlocks(peer)
 
 			n.logger.Infow("New peer", "id", peer.id)
-			return n.handlePeer(peer)
+			return n.runPeer(peer)
 		},
 		NodeInfo: n.Info,
 		//PeerInfo: func(id enode.ID) interface{} {
@@ -102,12 +103,11 @@ const (
 	PooledTransactionsMsg
 )
 
-const (
-	pingMsgCode = iota
-	pongMsgCode
+var (
+	handshakeTimeout = 5 * time.Second
 )
 
-func (n *Node) handlePeer(p *Peer) error {
+func (n *Node) runPeer(p *Peer) error {
 	ctx := context.Background()
 
 	var span opentracing.Span
@@ -138,10 +138,6 @@ func (n *Node) handlePeer(p *Peer) error {
 
 	var res *CallResult
 	switch msg.Code {
-	case StatusMsg:
-		if res, err = n.handleStatusMsg(ctx, payload); err != nil {
-			return err
-		}
 	case NewBlockHashesMsg:
 		if res, err = nilPeerHandler(ctx, payload); err != nil {
 			return err
@@ -208,6 +204,45 @@ func (n *Node) handlePeer(p *Peer) error {
 			return err
 		}
 	}
+
+	return nil
+}
+
+func (n *Node) handshake(ctx context.Context, p *Peer) error {
+	errC := make(chan error, 2)
+
+	var peerStatus StatusResult
+
+	go func() {
+		errC <- p2p.Send(p.rw, StatusMsg, StatusResult{
+			Head:      "",
+			Genesis:   "",
+			NetworkId: "",
+			Uptime:    0,
+		})
+	}()
+
+	go func() {
+		errC <- n.readStatus(ctx, p, &peerStatus)
+	}()
+
+	timeout := time.NewTimer(handshakeTimeout)
+	defer timeout.Stop()
+	for i := 0; i < 2; i++ {
+		select {
+		case err := <-errC:
+			if err != nil {
+				return err
+			}
+		case <-timeout.C:
+			return p2p.DiscReadTimeout
+		}
+	}
+
+	return nil
+}
+
+func (n *Node) readStatus(ctx context.Context, p *Peer, status *StatusResult) error {
 
 	return nil
 }

@@ -9,7 +9,7 @@ import (
 )
 
 // Genesis represents BlockChain initialization state
-//and provides its root state for new peer initialization
+// and provides its root state for new nodes initialization
 type Genesis struct {
 	ChainId     string         `json:"chain_id" yaml:"chain_id"`
 	GenesisTime int64          `json:"genesis_time" yaml:"genesis_time"`

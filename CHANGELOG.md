@@ -4,15 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
-## 9 Sep 2021
+## 10 Sep 2021
 
 ### Added
 
 ### Changed
+- Updated uber zap logger dependency version
 
 ### Fixed
 
 ### Removed
+
+
+## 9 Sep 2021
+
+### Added
+- Basic [dockerfile](Dockerfile)
 
 
 ## 8 Sep 2021
@@ -20,10 +27,6 @@ All notable changes to this project will be documented in this file.
 ### Added
 - GitHub actions Go fmt and vet checks (tests would be added as better design appears)
 - new p2p handling templates based on Etherium `p2p` 
-
-### Changed
-
-### Fixed
 
 ### Removed
 - gRPC and protobuf usage
