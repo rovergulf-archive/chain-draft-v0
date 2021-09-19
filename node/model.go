@@ -12,11 +12,19 @@ type CallResult struct {
 	Data []byte `json:"data" yaml:"data"`
 }
 
+// StatusResult
 type StatusResult struct {
 	Head      string `json:"head" yaml:"head"`
 	Genesis   string `json:"genesis"  yaml:"genesis"`
 	NetworkId string `json:"network_id" yaml:"network_id"`
 	Uptime    int64  `json:"uptime" yaml:"uptime"`
+}
+
+type PeerInfo struct {
+	Id        string         `json:"id" yaml:"id"`
+	Enode     string         `json:"enode" yaml:"enode"`
+	Name      string         `json:"name" yaml:"name"`
+	Protocols map[string]int `json:"protocols" yaml:"protocols"`
 }
 
 type JoinPeerRequest struct {

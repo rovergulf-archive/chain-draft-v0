@@ -16,13 +16,6 @@ import (
 	"time"
 )
 
-const (
-	endpointSyncQueryKeyFromBlock = "fromBlock"
-	endpointAddPeerQueryKeyIP     = "ip"
-	endpointAddPeerQueryKeyPort   = "port"
-	endpointAddPeerQueryKeyMiner  = "miner"
-)
-
 var allowedHeaders = []string{
 	"Accept",
 	"Content-Type",

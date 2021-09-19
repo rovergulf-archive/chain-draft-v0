@@ -28,6 +28,8 @@ func (n *Node) serveHttp() error {
 
 	// node routes
 
+	//r.HandleFunc("/ws", n.wsHandler)
+
 	r.HandleFunc(endpointStatus, n.healthCheck).Methods(http.MethodGet)
 	r.HandleFunc(endpointAddPeer, n.AddPeerNode).Methods(http.MethodGet)
 	r.HandleFunc(endpointSync, n.SyncPeers).Methods(http.MethodGet)
@@ -57,7 +59,8 @@ func (n *Node) serveHttp() error {
 }
 
 func (n *Node) nodeInfo(w http.ResponseWriter, r *http.Request) {
-	//ctx := r.Context()
+	ctx := r.Context()
+
 	lb, err := n.bc.GetBlock(n.bc.LastHash)
 	if err != nil {
 		if err != core.ErrBlockNotExists {
@@ -72,9 +75,16 @@ func (n *Node) nodeInfo(w http.ResponseWriter, r *http.Request) {
 	wLsm, wVlog := n.wm.DbSize()   // wallets db size
 	nLsm, nVlog := n.db.Size()     // node db size
 
+	gen, err := n.bc.GetGenesisBlock(ctx)
+	if err != nil {
+		n.httpResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	n.httpResponse(w, map[string]interface{}{
 		"node_info": n.srv.NodeInfo(),
-		"lash_hash": lb.BlockHeader.BlockHash.Hex(),
+		"genesis":   gen.BlockHash,
+		"head":      lb.BlockHeader.BlockHash.Hex(),
 		//"pending_txs": n.pendingState.pendingTxLen(),
 		"peers":       n.srv.PeerCount(),
 		"in_gen_race": n.inGenRace,
