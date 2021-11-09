@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/opentracing/opentracing-go"
-	"github.com/rovergulf/rbn/core"
-	"github.com/rovergulf/rbn/core/types"
-	"github.com/rovergulf/rbn/params"
+	"github.com/rovergulf/chain/core"
+	"github.com/rovergulf/chain/core/types"
+	"github.com/rovergulf/chain/params"
 	"time"
 )
 

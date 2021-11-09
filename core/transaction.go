@@ -3,7 +3,7 @@ package core
 import (
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/rovergulf/rbn/core/types"
+	"github.com/rovergulf/chain/core/types"
 )
 
 func (bc *BlockChain) ListTransactions() ([]types.SignedTx, error) {

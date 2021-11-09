@@ -7,7 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/opentracing/opentracing-go"
-	"github.com/rovergulf/rbn/params"
+	"github.com/rovergulf/chain/params"
 	"github.com/spf13/viper"
 	"io/ioutil"
 	"sync/atomic"

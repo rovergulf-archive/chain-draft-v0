@@ -29,7 +29,7 @@ go run cmd/cli/main.go help
 
 ### From source
 ```shell
-git clone github.com/rovergulf/rbn
+git clone github.com/rovergulf/chain
 wget dl.rovergulf.net/rbn:$RELEASE # TBD platform support 
 ```
 

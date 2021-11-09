@@ -7,13 +7,13 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/gorilla/mux"
-	"github.com/rovergulf/rbn/core"
-	"github.com/rovergulf/rbn/core/types"
-	"github.com/rovergulf/rbn/database/badgerdb"
-	"github.com/rovergulf/rbn/params"
-	"github.com/rovergulf/rbn/pkg/sigutil"
-	"github.com/rovergulf/rbn/pkg/traceutil"
-	"github.com/rovergulf/rbn/wallets"
+	"github.com/rovergulf/chain/core"
+	"github.com/rovergulf/chain/core/types"
+	"github.com/rovergulf/chain/database/badgerdb"
+	"github.com/rovergulf/chain/params"
+	"github.com/rovergulf/chain/pkg/sigutil"
+	"github.com/rovergulf/chain/pkg/traceutil"
+	"github.com/rovergulf/chain/wallets"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"os"
@@ -96,7 +96,6 @@ func (n *Node) Init(ctx context.Context) error {
 		time.AfterFunc(15*time.Second, func() {
 			n.logger.Fatal("Failed to gracefully shutdown after 15 sec. Force exit")
 		})
-		n.Shutdown()
 	})
 
 	tracer, err := traceutil.NewTracerFromViperConfig()

@@ -7,10 +7,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/rovergulf/rbn/core"
-	"github.com/rovergulf/rbn/core/types"
-	"github.com/rovergulf/rbn/params"
-	"github.com/rovergulf/rbn/wallets"
+	"github.com/rovergulf/chain/core"
+	"github.com/rovergulf/chain/core/types"
+	"github.com/rovergulf/chain/params"
+	"github.com/rovergulf/chain/wallets"
 	"net/http"
 )
 

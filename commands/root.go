@@ -3,11 +3,11 @@ package commands
 import (
 	"fmt"
 	homedir "github.com/mitchellh/go-homedir"
-	"github.com/rovergulf/rbn/core"
-	"github.com/rovergulf/rbn/node"
-	"github.com/rovergulf/rbn/params"
-	"github.com/rovergulf/rbn/pkg/traceutil"
-	"github.com/rovergulf/rbn/wallets"
+	"github.com/rovergulf/chain/core"
+	"github.com/rovergulf/chain/node"
+	"github.com/rovergulf/chain/params"
+	"github.com/rovergulf/chain/pkg/traceutil"
+	"github.com/rovergulf/chain/wallets"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -64,7 +64,7 @@ func init() {
 
 	// main flags
 	rootCmd.PersistentFlags().StringVar(&dataDir, "data_dir", os.Getenv("DATA_DIR"), "BlockChain data directory")
-	rootCmd.PersistentFlags().StringVar(&dataDir, "network_id", params.MainNetworkId, "Chain network id")
+	rootCmd.PersistentFlags().Int64("network_id", int64(params.MainNetworkId), "Chain network id")
 
 	// bind viper values
 	bindViperPersistentFlag(rootCmd, "network.id", "network_id")
@@ -141,11 +141,16 @@ func setConfigDefaults() {
 
 	// TBD dgraph connection settings
 	// !!! Database interface needs to be implemented to use that
-	//viper.SetDefault("dgraph.enabled", false)
-	//viper.SetDefault("dgraph.host", "127.0.0.1")
-	//viper.SetDefault("dgraph.port", "9080")
-	//viper.SetDefault("dgraph.user", "")
-	//viper.SetDefault("dgraph.password", "")
+	viper.SetDefault("dgraph.enabled", false)
+	viper.SetDefault("dgraph.host", "127.0.0.1")
+	viper.SetDefault("dgraph.port", "9080")
+	viper.SetDefault("dgraph.user", "")
+	viper.SetDefault("dgraph.password", "")
+	viper.SetDefault("dgraph.tls.enabled", false)
+	viper.SetDefault("dgraph.tls.cert", "")
+	viper.SetDefault("dgraph.tls.key", "")
+	viper.SetDefault("dgraph.tls.verify", false)
+	viper.SetDefault("dgraph.tls.auth", "")
 
 	// chain network setup
 	viper.SetDefault("network.id", params.MainNetworkId)

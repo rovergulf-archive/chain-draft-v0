@@ -5,7 +5,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/console/prompt"
-	"github.com/rovergulf/rbn/wallets"
+	"github.com/rovergulf/chain/wallets"
 	"github.com/spf13/cobra"
 	"github.com/tyler-smith/go-bip39"
 	"io/ioutil"

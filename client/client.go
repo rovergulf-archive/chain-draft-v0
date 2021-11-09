@@ -2,8 +2,8 @@ package client
 
 import (
 	"context"
-	"github.com/rovergulf/rbn/pkg/traceutil"
-	"github.com/rovergulf/rbn/rpc"
+	"github.com/rovergulf/chain/pkg/traceutil"
+	"github.com/rovergulf/chain/rpc"
 	"go.uber.org/zap"
 )
 

@@ -21,8 +21,8 @@ contact points for developers, and other resources to help get contributions int
 Reporting bugs is one of the best ways to contribute.
 
 However, a good bug report has some very specific qualities, so please, 
-check if there is already no [existing one](https://github.com/rovergulf/rbn/issues) 
-before submitting a bug report or creating a [pull request](https://github.com/rovergulf/rbn/pulls).
+check if there is already no [existing one](https://github.com/rovergulf/chain/issues) 
+before submitting a bug report or creating a [pull request](https://github.com/rovergulf/chain/pulls).
 
 ## Contribution flow
 
@@ -34,6 +34,6 @@ This is a rough outline of what a contributor's workflow looks like:
 - Push changes in a topic branch to a personal fork of the repository.
 - Submit a pull request to rovergulf/rbn.
 - The PR must receive a LGTM from at least one of maintainers found 
-  in the [repository contributors](https://github.com/rovergulf/rbn/graphs/contributors).
+  in the [repository contributors](https://github.com/rovergulf/chain/graphs/contributors).
 
 Thanks for contributing!

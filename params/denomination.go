@@ -1,8 +1,8 @@
 package params
 
 const (
-	Nether = 1   // smallest denomination of Coin, is an acronym for Network, Etherium and Rovergulf
-	Coin   = 1e9 // One "Nether Coin" or "Rovergulf Coin"
+	Nether = 1    // smallest denomination of Coin, is an acronym for Network, Etherium and Rovergulf
+	Raftel = 1e12 // One "Nether Coin" or "Raftel"
 )
 
 //
@@ -11,6 +11,6 @@ const (
 // and probably some magic, as well space technologies invented
 // So Nether represents for me something like an iron ore resource,
 // but its original english language value fits well, and still may sound cool in other languages
-// So "Nether Coin" represents Rovergulf Native Token which abbreviation RNT sounds not badass enough
-// As well Rovergulf Coin would be implemented in a second/supportive way
+// So "Raftel" represents Rovergulf Native Token which is accent spelling of "Laugh tale"
+// and refers to "One Piece" written by Eiichiro Oda (details on: https://en.wikipedia.org/wiki/Eiichiro_Oda)
 //

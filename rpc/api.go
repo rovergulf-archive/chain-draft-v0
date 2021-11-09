@@ -17,7 +17,7 @@ type Stack struct {
 	handlers map[int]ApiHandler
 
 	// cannot be used, circular dependency guaranteed
-	// github issue: https://github.com/rovergulf/rbn/issues/30
+	// github issue: https://github.com/rovergulf/chain/issues/30
 	//bc  *core.BlockChain
 	//ndb *node.DB
 	//wm  *wallets.Manager

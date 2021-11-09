@@ -17,7 +17,7 @@
 package main
 
 import (
-	"github.com/rovergulf/rbn/commands"
+	"github.com/rovergulf/chain/commands"
 )
 
 func main() {

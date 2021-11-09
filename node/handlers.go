@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/opentracing/opentracing-go"
-	"github.com/rovergulf/rbn/pkg/traceutil"
+	"github.com/rovergulf/chain/pkg/traceutil"
 )
 
 func (n *Node) handleStatusMsg(ctx context.Context, payload []byte) (*CallResult, error) {

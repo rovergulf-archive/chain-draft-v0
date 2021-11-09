@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/rovergulf/rbn/core/types"
-	"github.com/rovergulf/rbn/params"
+	"github.com/rovergulf/chain/core/types"
+	"github.com/rovergulf/chain/params"
 )
 
 func (bc *BlockChain) ApplyTx(txHash common.Hash, tx *types.SignedTx) (*types.Receipt, error) {

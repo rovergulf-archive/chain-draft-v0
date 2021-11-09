@@ -6,7 +6,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/rovergulf/rbn/params"
+	"github.com/rovergulf/chain/params"
 	"time"
 )
 

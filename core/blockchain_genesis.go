@@ -4,8 +4,8 @@ import (
 	"context"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/opentracing/opentracing-go"
-	"github.com/rovergulf/rbn/core/types"
-	"github.com/rovergulf/rbn/pkg/traceutil"
+	"github.com/rovergulf/chain/core/types"
+	"github.com/rovergulf/chain/pkg/traceutil"
 	"github.com/spf13/viper"
 )
 

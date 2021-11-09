@@ -4,7 +4,7 @@ import (
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/opentracing/opentracing-go"
-	"github.com/rovergulf/rbn/core/types"
+	"github.com/rovergulf/chain/core/types"
 	"go.uber.org/zap"
 )
 

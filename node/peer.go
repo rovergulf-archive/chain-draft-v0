@@ -7,7 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/rovergulf/rbn/params"
+	"github.com/rovergulf/chain/params"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"sync"
