@@ -4,11 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
-## 11 Sep 2021
+## 14 Nov 2021
 
 ### Added
 
 ### Changed
+
+### Fixed
+
+### Removed
+
+
+## 13 Nov 2021
+
+### Added
+
+### Changed
+- Dependabot to weekly frequency checks
+- 
 
 ### Fixed
 
@@ -17,14 +30,8 @@ All notable changes to this project will be documented in this file.
 
 ## 10 Sep 2021
 
-### Added
-
 ### Changed
 - Updated uber zap logger dependency version
-
-### Fixed
-
-### Removed
 
 
 ## 9 Sep 2021
