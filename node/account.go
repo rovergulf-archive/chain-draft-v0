@@ -3,8 +3,8 @@ package node
 import (
 	"context"
 	"github.com/dgraph-io/badger/v3"
-	"github.com/rovergulf/rbn/core"
-	"github.com/rovergulf/rbn/wallets"
+	"github.com/rovergulf/chain/core"
+	"github.com/rovergulf/chain/wallets"
 )
 
 func (n *Node) saveNodeAccount(w *wallets.Wallet) error {

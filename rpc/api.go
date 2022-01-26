@@ -17,7 +17,7 @@ type Stack struct {
 	handlers map[int]ApiHandler
 
 	// cannot be used, circular dependency guaranteed
-	// github issue: https://github.com/rovergulf/rbn/issues/30
+	// github issue: https://github.com/rovergulf/chain/issues/30
 	//bc  *core.BlockChain
 	//ndb *node.DB
 	//wm  *wallets.Manager
@@ -28,6 +28,7 @@ type ApiRequest struct {
 	Namespace string `json:"namespace" yaml:"namespace"`
 	PeerId    string `json:"peer_id" yaml:"peer_id"`
 	Data      []byte `json:"data" yaml:"data"`
+	Method    string `json:"method"`
 }
 
 type ApiResponse struct {

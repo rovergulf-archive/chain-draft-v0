@@ -6,7 +6,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/rovergulf/rbn/params"
+	"github.com/rovergulf/chain/params"
 	"time"
 )
 
@@ -22,7 +22,7 @@ func NewTransaction(from, to common.Address, amount uint64, nonce uint64, data [
 		return Transaction{}, fmt.Errorf("transaction cannot be sent to yourself")
 	}
 
-	percentile := params.Coin / (params.TxPrice * params.NetherPrice)
+	percentile := params.Raftel / (params.TxPrice * params.NetherPrice)
 	nether := amount / percentile
 	if nether < params.NetherLimit {
 		nether = params.NetherLimit
@@ -50,6 +50,10 @@ type Transaction struct {
 	NetherPrice uint64         `json:"nether_price" yaml:"nether_price"`
 	Data        []byte         `json:"data" yaml:"data"` // contract data
 	Time        int64          `json:"time" yaml:"time"`
+
+	//R []byte
+	//S []byte
+	//V []byte
 }
 
 // Hash returns a hash of the transaction

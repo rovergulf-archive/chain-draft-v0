@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/rovergulf/rbn/core/types"
+	"github.com/rovergulf/chain/core/types"
 )
 
 // ValidateNextBlock simply validates base block values // TBD made more efficient validation method

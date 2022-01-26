@@ -3,9 +3,9 @@ package wallets
 import (
 	"errors"
 	"github.com/dgraph-io/badger/v3"
-	"github.com/rovergulf/rbn/database/badgerdb"
-	"github.com/rovergulf/rbn/params"
-	"github.com/rovergulf/rbn/pkg/traceutil"
+	"github.com/rovergulf/chain/database/badgerdb"
+	"github.com/rovergulf/chain/params"
+	"github.com/rovergulf/chain/pkg/traceutil"
 	"go.uber.org/zap"
 )
 

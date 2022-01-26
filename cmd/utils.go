@@ -1,13 +1,14 @@
-package commands
+package cmd
 
 import (
 	"context"
 	"fmt"
-	"github.com/rovergulf/rbn/core"
-	"github.com/rovergulf/rbn/node"
-	"github.com/rovergulf/rbn/params"
-	"github.com/rovergulf/rbn/pkg/resutil"
-	"github.com/rovergulf/rbn/wallets"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/rovergulf/chain/core"
+	"github.com/rovergulf/chain/node"
+	"github.com/rovergulf/chain/params"
+	"github.com/rovergulf/chain/pkg/resutil"
+	"github.com/rovergulf/chain/wallets"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"log"
@@ -104,7 +105,7 @@ func addOutputFormatFlag(cmd *cobra.Command) {
 }
 
 func addNetworkIdFlag(cmd *cobra.Command) {
-	cmd.Flags().String("network-id", params.MainNetworkId, "Chain network id")
+	cmd.Flags().String("network-id", hexutil.EncodeUint64(params.MainNetworkId), "Chain network id")
 	bindViperFlag(cmd, "network-id", "network-id")
 }
 

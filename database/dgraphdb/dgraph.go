@@ -5,7 +5,7 @@ import (
 	"github.com/dgraph-io/dgo/v210"
 	"github.com/dgraph-io/dgo/v210/protos/api"
 	"github.com/opentracing/opentracing-go"
-	"github.com/rovergulf/rbn/params"
+	"github.com/rovergulf/chain/params"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"

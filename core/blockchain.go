@@ -5,9 +5,9 @@ import (
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/opentracing/opentracing-go"
-	"github.com/rovergulf/rbn/core/types"
-	"github.com/rovergulf/rbn/database/badgerdb"
-	"github.com/rovergulf/rbn/params"
+	"github.com/rovergulf/chain/core/types"
+	"github.com/rovergulf/chain/database/badgerdb"
+	"github.com/rovergulf/chain/params"
 	"go.uber.org/zap"
 	"io"
 )

@@ -7,8 +7,8 @@ import (
 	"github.com/opentracing/opentracing-go"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prom2json"
-	"github.com/rovergulf/rbn/params"
-	"github.com/rovergulf/rbn/pkg/resutil"
+	"github.com/rovergulf/chain/params"
+	"github.com/rovergulf/chain/pkg/resutil"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"net/http"
@@ -39,10 +39,9 @@ var allowedMethods = []string{
 
 // httpServer represents mux.Router interceptor, to handle CORS requests
 type httpServer struct {
-	router     *mux.Router
-	tracer     opentracing.Tracer
-	logger     *zap.SugaredLogger
-	httpServer http.Server
+	router *mux.Router
+	tracer opentracing.Tracer
+	logger *zap.SugaredLogger
 }
 
 // ServeHTTP wraps http.Server ServeHTTP method to handle preflight requests
@@ -81,7 +80,7 @@ func (h *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (n *Node) httpResponse(w http.ResponseWriter, i interface{}, statusCode ...int) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
-	if len(statusCode) > 0 {
+	if len(statusCode) > http.StatusOK {
 		w.WriteHeader(statusCode[0])
 	} else {
 		w.WriteHeader(http.StatusOK)

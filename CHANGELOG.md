@@ -4,16 +4,45 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
-## 10 Sep 2021
+## 27 Jan 2022
 
 ### Added
 
 ### Changed
-- Updated uber zap logger dependency version
 
 ### Fixed
 
 ### Removed
+
+
+## 26 Jan 2022
+
+### Added
+
+### Changed
+- restructurize
+- update dependencies
+
+### Fixed
+
+### Removed
+
+
+## 13 Nov 2021
+
+### Added
+- chain utils can parse private key string
+
+### Changed
+- Dependabot to weekly frequency checks
+- Prepare dgraph driver
+- Prepare API Handler interface
+
+
+## 10 Sep 2021
+
+### Changed
+- Updated uber zap logger dependency version
 
 
 ## 9 Sep 2021

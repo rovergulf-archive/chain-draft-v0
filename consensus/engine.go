@@ -3,7 +3,7 @@ package consensus
 import (
 	"context"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/rovergulf/rbn/core/types"
+	"github.com/rovergulf/chain/core/types"
 )
 
 // Engine is the consensus Node interface

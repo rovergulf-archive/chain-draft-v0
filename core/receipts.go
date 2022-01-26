@@ -4,7 +4,7 @@ import (
 	"context"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/rovergulf/rbn/core/types"
+	"github.com/rovergulf/chain/core/types"
 )
 
 func (bc *BlockChain) SaveReceipt(ctx context.Context, receipt *types.Receipt) error {

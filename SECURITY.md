@@ -8,4 +8,4 @@
 
 ## Reporting a Vulnerability
 
-To report an issue visit [Github repository issues](https://github.com/rovergulf/rbn/issues)
+To report an issue visit [Github repository issues](https://github.com/rovergulf/chain/issues)

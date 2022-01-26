@@ -4,14 +4,15 @@ import (
 	"bytes"
 	"encoding/gob"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/rovergulf/rbn/core/types"
-	"github.com/rovergulf/rbn/params"
+	"github.com/rovergulf/chain/core/types"
+	"github.com/rovergulf/chain/params"
+	"math/big"
 )
 
 // Genesis represents BlockChain initialization state
 // and provides its root state for new nodes initialization
 type Genesis struct {
-	ChainId     string         `json:"chain_id" yaml:"chain_id"`
+	ChainId     *big.Int       `json:"chain_id" yaml:"chain_id"`
 	GenesisTime int64          `json:"genesis_time" yaml:"genesis_time"`
 	NetherPrice uint64         `json:"nether_limit" yaml:"nether_limit"`
 	Nonce       uint64         `json:"nonce" yaml:"nonce"`
@@ -26,7 +27,7 @@ type Genesis struct {
 // DevNetGenesis returns default Genesis for development and testing network
 func DevNetGenesis() *Genesis {
 	return &Genesis{
-		ChainId:     params.OpenDevNetworkId,
+		ChainId:     big.NewInt(params.OpenDevNetworkId),
 		GenesisTime: 1625422671,
 		NetherPrice: 21000,
 		Nonce:       0,
@@ -42,7 +43,7 @@ func DevNetGenesis() *Genesis {
 // DefaultMainNetGenesis returns default Genesis for main Rovergulf BlockChain Network
 func DefaultMainNetGenesis() *Genesis {
 	return &Genesis{
-		ChainId:     params.MainNetworkId,
+		ChainId:     big.NewInt(params.MainNetworkId),
 		GenesisTime: 1625422671,
 		NetherPrice: 21000,
 		Nonce:       0,
@@ -108,8 +109,8 @@ func (g *Genesis) ToBlock() (*types.Block, error) {
 	return b, nil
 }
 
-func genesisByNetworkId(networkId string) *Genesis {
-	switch networkId {
+func genesisByNetworkId(networkId *big.Int) *Genesis {
+	switch networkId.Int64() {
 	case params.OpenDevNetworkId:
 		return DevNetGenesis()
 	case params.MainNetworkId:

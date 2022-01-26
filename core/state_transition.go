@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/rovergulf/rbn/core/types"
-	"github.com/rovergulf/rbn/params"
+	"github.com/rovergulf/chain/core/types"
+	"github.com/rovergulf/chain/params"
 )
 
 func (bc *BlockChain) ApplyTx(txHash common.Hash, tx *types.SignedTx) (*types.Receipt, error) {
@@ -97,7 +97,7 @@ func (bc *BlockChain) applyRewardTx(ctx context.Context, tx *types.SignedTx) (*t
 func (bc *BlockChain) ApplyBlock(ctx context.Context, block *types.Block) error {
 
 	pool := block.NetherUsed
-	bc.logger.Debugf("Nether pool available: ~%.5f", float64(pool/params.Coin))
+	bc.logger.Debugf("Nether pool available: ~%.5f", float64(pool/params.Raftel))
 
 	var txsHashes, receiptsHashes [][]byte
 	for i := range block.Transactions {

@@ -6,7 +6,7 @@ import (
 
 const (
 	Badger = "badger" // idk, pretty sure etcd, bbolt or consul would fit as well
-	Dgraph = "dgraph" // would research and implement: https://github.com/rovergulf/rbn/issues/28
+	Dgraph = "dgraph" // would research and implement: https://github.com/rovergulf/chain/issues/28
 )
 
 // Config is used to configure and run RBN database backend

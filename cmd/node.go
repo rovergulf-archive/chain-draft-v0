@@ -1,9 +1,9 @@
-package commands
+package cmd
 
 import (
 	"context"
 	"fmt"
-	"github.com/rovergulf/rbn/node"
+	"github.com/rovergulf/chain/node"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"io/ioutil"
