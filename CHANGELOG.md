@@ -4,11 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] v0.1.0
 
-## 14 Nov 2021
+## 27 Jan 2022
 
 ### Added
 
 ### Changed
+
+### Fixed
+
+### Removed
+
+
+## 26 Jan 2022
+
+### Added
+
+### Changed
+- restructurize
+- update dependencies
 
 ### Fixed
 
@@ -18,14 +31,12 @@ All notable changes to this project will be documented in this file.
 ## 13 Nov 2021
 
 ### Added
+- chain utils can parse private key string
 
 ### Changed
 - Dependabot to weekly frequency checks
-- 
-
-### Fixed
-
-### Removed
+- Prepare dgraph driver
+- Prepare API Handler interface
 
 
 ## 10 Sep 2021

@@ -97,7 +97,7 @@ func (bc *BlockChain) applyRewardTx(ctx context.Context, tx *types.SignedTx) (*t
 func (bc *BlockChain) ApplyBlock(ctx context.Context, block *types.Block) error {
 
 	pool := block.NetherUsed
-	bc.logger.Debugf("Nether pool available: ~%.5f", float64(pool/params.Coin))
+	bc.logger.Debugf("Nether pool available: ~%.5f", float64(pool/params.Raftel))
 
 	var txsHashes, receiptsHashes [][]byte
 	for i := range block.Transactions {

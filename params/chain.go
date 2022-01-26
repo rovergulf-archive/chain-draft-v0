@@ -1,8 +1,8 @@
 package params
 
 const (
-	OpenDevNetworkId = 9421 // dev environment network id
-	MainNetworkId    = 9420 // default main network id
+	OpenDevNetworkId = 9421 // dev environment network id: 0x24FD
+	MainNetworkId    = 9420 // default main network id: 0x24CC
 )
 
 const (

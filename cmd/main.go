@@ -1,12 +1,28 @@
-package commands
+// Copyright 2021 The rbn Authors
+// This file is part of the rbn library.
+//
+// The rbn library is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// The rbn library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the rbn library. If not, see <http://www.gnu.org/licenses/>.
+
+package main
 
 import (
 	"fmt"
-	homedir "github.com/mitchellh/go-homedir"
+	"github.com/mitchellh/go-homedir"
 	"github.com/rovergulf/chain/core"
 	"github.com/rovergulf/chain/node"
 	"github.com/rovergulf/chain/params"
-	"github.com/rovergulf/chain/pkg/traceutil"
+	"github.com/rovergulf/chain/pkg/configutil"
 	"github.com/rovergulf/chain/wallets"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -24,21 +40,8 @@ var (
 	localNode        *node.Node
 )
 
-// rootCmd represents the base command when called without any subcommands
-var rootCmd = &cobra.Command{
-	Use:     "rbn",
-	Short:   "Rovergulf BlockChain CLI",
-	Long:    `Rovergulf BlockChain Network SDK`,
-	Version: "0.0.1-dev",
-	PreRunE: func(cmd *cobra.Command, args []string) error {
-		ver, _ := cmd.Flags().GetBool("version")
-		if ver {
-			return writeOutput(cmd, cmd.Version)
-		} else {
-			return cmd.Usage()
-		}
-	},
-	SilenceUsage: true,
+func main() {
+	Execute()
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -119,7 +122,7 @@ func initConfig() {
 		viper.SetConfigName("config.yaml")
 	}
 
-	setConfigDefaults()
+	configutil.SetDefaultConfigValues()
 
 	viper.AutomaticEnv() // read in environment variables that match
 
@@ -127,64 +130,6 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Println("Using config file:", viper.ConfigFileUsed())
 	}
-}
-
-func setConfigDefaults() {
-	viper.SetDefault("metrics", true)
-	viper.SetDefault(traceutil.JaegerTraceConfigKey, os.Getenv("JAEGER_TRACE"))
-
-	// storage
-	viper.SetDefault("db", "")
-	viper.SetDefault("data_dir", "tmp")
-	viper.SetDefault("keystore", "")
-	viper.SetDefault("pid_file", "/var/run/rbn/pidfile")
-
-	// TBD dgraph connection settings
-	// !!! Database interface needs to be implemented to use that
-	viper.SetDefault("dgraph.enabled", false)
-	viper.SetDefault("dgraph.host", "127.0.0.1")
-	viper.SetDefault("dgraph.port", "9080")
-	viper.SetDefault("dgraph.user", "")
-	viper.SetDefault("dgraph.password", "")
-	viper.SetDefault("dgraph.tls.enabled", false)
-	viper.SetDefault("dgraph.tls.cert", "")
-	viper.SetDefault("dgraph.tls.key", "")
-	viper.SetDefault("dgraph.tls.verify", false)
-	viper.SetDefault("dgraph.tls.auth", "")
-
-	// chain network setup
-	viper.SetDefault("network.id", params.MainNetworkId)
-
-	// p2p settings
-	viper.SetDefault("node.max_peers", 256)
-	viper.SetDefault("node.addr", "127.0.0.1")
-	viper.SetDefault("node.port", 9420)
-	viper.SetDefault("node.sync_mode", node.SyncModeDefault)
-	viper.SetDefault("node.sync_interval", 5)
-	viper.SetDefault("node.cache_dir", "")
-	viper.SetDefault("node.no_discovery", false)
-
-	// http server
-	viper.SetDefault("http.disabled", false)
-	viper.SetDefault("http.addr", "127.0.0.1")
-	viper.SetDefault("http.port", 9469)
-	viper.SetDefault("http.dial_timeout", 30)
-	viper.SetDefault("http.read_timeout", 30)
-	viper.SetDefault("http.write_timeout", 30)
-	viper.SetDefault("http.ssl.enabled", false)
-	viper.SetDefault("http.ssl.cert", "")
-	viper.SetDefault("http.ssl.key", "")
-	viper.SetDefault("http.ssl.verify", false)
-
-	// TBD
-	// Cache
-	//viper.SetDefault("cache.enabled", false)
-	viper.SetDefault("cache.size", 256<<20) // 256mb
-
-	// Runtime configuration
-	//viper.SetDefault("runtime.max_cpu", runtime.NumCPU())
-	//viper.SetDefault("runtime.max_mem", getAvailableOSMemory())
-
 }
 
 // initializes zap.SugaredLogger instance for logger

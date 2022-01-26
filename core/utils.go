@@ -2,9 +2,12 @@ package core
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"errors"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 	"math/big"
 	"reflect"
 	"regexp"
@@ -132,4 +135,22 @@ func SigRSV(isig interface{}) ([32]byte, [32]byte, uint8) {
 	V := uint8(vI + 27)
 
 	return R, S, V
+}
+
+func PrivateKeyStringToKey(pkString string) (*keystore.Key, error) {
+	privateKey, err := crypto.HexToECDSA(pkString)
+	if err != nil {
+		return nil, err
+	}
+
+	publicKey := privateKey.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		return nil, err
+	}
+
+	return &keystore.Key{
+		Address:    crypto.PubkeyToAddress(*publicKeyECDSA),
+		PrivateKey: privateKey,
+	}, nil
 }

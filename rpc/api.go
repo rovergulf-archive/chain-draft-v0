@@ -28,6 +28,7 @@ type ApiRequest struct {
 	Namespace string `json:"namespace" yaml:"namespace"`
 	PeerId    string `json:"peer_id" yaml:"peer_id"`
 	Data      []byte `json:"data" yaml:"data"`
+	Method    string `json:"method"`
 }
 
 type ApiResponse struct {

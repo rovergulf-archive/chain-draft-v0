@@ -6,13 +6,13 @@ contact points for developers, and other resources to help get contributions int
 
 # Email and chat
 
-- Rovergulf Engineers Discord: [Join]() // TBD
+- Rovergulf Engineers Discord: [Join](https://discord.gg/REcNxVNQjT)
 - Email: [Rovergulf Engineers Team](team@rovergulf.net)
 
 ## Getting started
 
 - Read the contributing guide at 
-  [Rovergulf Blockchain Network Contributing Guide](https://chain.rovergulf.net/docs/contributing)
+  [Rovergulf Blockchain Network Contributing Guide](https://chain.rovergulf.net/docs/contributing) - TBD
 - Fork the repository on GitHub
 - Read the README.md for development installation and usage instructions
 

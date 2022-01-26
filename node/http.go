@@ -183,7 +183,7 @@ func (n *Node) txAdd(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nonce := n.bc.GetNextAccountNonce(from)
-	tx, err := types.NewTransaction(from, common.HexToAddress(req.To), uint64(req.Value*params.Coin), nonce, req.Data)
+	tx, err := types.NewTransaction(from, common.HexToAddress(req.To), uint64(req.Value*params.Raftel), nonce, req.Data)
 	if err != nil {
 		n.logger.Errorf("Unable to create new transaction: %s", err)
 		n.httpResponse(w, err, http.StatusBadRequest)
